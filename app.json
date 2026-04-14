@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "WILDS",
+    "slug": "wilds",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "backgroundColor": "#4A7C59"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.baptiste.wilds",
+      "deploymentTarget": "15.0"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#4A7C59"
+      },
+      "package": "com.baptiste.wilds",
+      "minSdkVersion": 26
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#4A7C59"
+        }
+      ]
+    ],
+    "scheme": "wilds",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
