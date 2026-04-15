@@ -1,0 +1,660 @@
+/**
+ * CreatureSprite — Skia-drawn animated creature rendering.
+ *
+ * Phase 2 fully implements 6 species:
+ *   Feuillon, Broutard, Boussin, Mellior, Flottin, Sirpio
+ * Remaining 12 species render a styled placeholder until their phases.
+ *
+ * All bodies are centered at (0, 0) in local space.
+ * The outer Group's transform handles world-space positioning.
+ *
+ * Animation:
+ *   - Position: withTiming toward targetPosition (2s per tile)
+ *   - Sleeping: breathing scale (1.0 → 1.03) + ZZZ bubbles
+ *   - Stumbling: quick scale jolt (1.0 → 1.2 → 1.0)
+ *   - Affection: heart particle floats up
+ *   - Shiny: golden shimmer pulse
+ */
+import React, { memo, useEffect, useMemo } from 'react';
+import {
+  Canvas,
+  Circle,
+  Group,
+  Path,
+  Rect,
+  RoundedRect,
+  Skia,
+} from '@shopify/react-native-skia';
+import {
+  cancelAnimation,
+  Easing,
+  useDerivedValue,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
+import { Creature } from '../../store/creatureStore';
+import { SPECIES_MAP } from '../../constants/creatures';
+import { TILE_SIZE } from '../../constants/terrain';
+
+// ---------------------------------------------------------------------------
+// Z-bubble helpers
+// ---------------------------------------------------------------------------
+
+/** Single "Z" drawn as three stroked line segments */
+function ZShape() {
+  const path = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-4, 0);  p.lineTo(4, 0);
+    p.moveTo(4, 0);   p.lineTo(-4, 8);
+    p.moveTo(-4, 8);  p.lineTo(4, 8);
+    return p;
+  }, []);
+  return (
+    <Path
+      path={path}
+      color="rgba(80,60,140,0.90)"
+      style="stroke"
+      strokeWidth={1.8}
+      strokeCap="round"
+      strokeJoin="round"
+    />
+  );
+}
+
+interface ZzzBubbleProps {
+  index: number; // 0, 1, 2 — controls stagger + size
+}
+
+function ZzzBubble({ index }: ZzzBubbleProps) {
+  const DELAY    = index * 600;           // stagger: 0, 600, 1200 ms
+  const SCALE    = 0.6 + index * 0.2;    // 0.6, 0.8, 1.0
+  const XOFF     = (index - 1) * 9;      // -9, 0, +9 px spread
+
+  const opacity  = useSharedValue(0);
+  const offsetY  = useSharedValue(0);
+
+  useEffect(() => {
+    opacity.value = withDelay(
+      DELAY,
+      withRepeat(
+        withSequence(
+          withTiming(0,   { duration: 0 }),
+          withTiming(1,   { duration: 300 }),
+          withTiming(1,   { duration: 1200 }),
+          withTiming(0,   { duration: 300 }),
+        ),
+        -1,
+        false,
+      ),
+    );
+    offsetY.value = withDelay(
+      DELAY,
+      withRepeat(
+        withSequence(
+          withTiming(0,   { duration: 0 }),
+          withTiming(-20, { duration: 1800, easing: Easing.out(Easing.quad) }),
+        ),
+        -1,
+        false,
+      ),
+    );
+    return () => {
+      cancelAnimation(opacity);
+      cancelAnimation(offsetY);
+    };
+  }, []);
+
+  const transform = useDerivedValue(() => [
+    { translateX: XOFF },
+    { translateY: -22 + offsetY.value },
+    { scale: SCALE },
+  ]);
+
+  return (
+    <Group transform={transform} opacity={opacity}>
+      <ZShape />
+    </Group>
+  );
+}
+
+function ZzzBubbles() {
+  return (
+    <Group>
+      <ZzzBubble index={0} />
+      <ZzzBubble index={1} />
+      <ZzzBubble index={2} />
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Heart particle
+// ---------------------------------------------------------------------------
+
+interface HeartParticleProps {
+  trigger: number; // timestamp — changes cause the animation to re-fire
+}
+
+function HeartParticle({ trigger }: HeartParticleProps) {
+  const opacity  = useSharedValue(0);
+  const offsetY  = useSharedValue(0);
+
+  const heartPath = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(0, 5);
+    p.lineTo(-7, -2);
+    p.lineTo(-3.5, -6);
+    p.lineTo(0, -3);
+    p.lineTo(3.5, -6);
+    p.lineTo(7, -2);
+    p.close();
+    return p;
+  }, []);
+
+  useEffect(() => {
+    if (!trigger) return;
+    cancelAnimation(opacity);
+    cancelAnimation(offsetY);
+    offsetY.value = 0;
+    opacity.value = withSequence(
+      withTiming(1,   { duration: 150 }),
+      withTiming(1,   { duration: 500 }),
+      withTiming(0,   { duration: 300 }),
+    );
+    offsetY.value = withTiming(-32, { duration: 950, easing: Easing.out(Easing.quad) });
+  }, [trigger]);
+
+  const transform = useDerivedValue(() => [
+    { translateY: -20 + offsetY.value },
+  ]);
+
+  return (
+    <Group transform={transform} opacity={opacity}>
+      <Circle cx={-3.5} cy={-4} r={4}   color="#FF6B8A" />
+      <Circle cx={3.5}  cy={-4} r={4}   color="#FF6B8A" />
+      <Path   path={heartPath}           color="#FF6B8A" />
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shiny shimmer overlay
+// ---------------------------------------------------------------------------
+
+function ShimmerOverlay() {
+  const op = useSharedValue(0.35);
+
+  useEffect(() => {
+    op.value = withRepeat(
+      withSequence(
+        withTiming(0.75, { duration: 900 }),
+        withTiming(0.35, { duration: 900 }),
+      ),
+      -1,
+      false,
+    );
+    return () => cancelAnimation(op);
+  }, []);
+
+  return (
+    <Group opacity={op}>
+      <Circle cx={0} cy={0} r={17} color="rgba(255,215,0,0.55)" />
+      <Circle cx={-6} cy={-8} r={2.5} color="rgba(255,255,200,0.9)" />
+      <Circle cx={7}  cy={-5} r={1.5} color="rgba(255,255,200,0.9)" />
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sleep desaturation overlay
+// ---------------------------------------------------------------------------
+
+function SleepOverlay() {
+  return <Circle cx={0} cy={0} r={18} color="rgba(20,20,60,0.22)" />;
+}
+
+// ---------------------------------------------------------------------------
+// Species body components  (all centered at 0,0)
+// ---------------------------------------------------------------------------
+
+function FeuillonBody({ sleeping }: { sleeping: boolean }) {
+  const leftEar = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-8, -10);  p.lineTo(-16, -21);  p.lineTo(-4, -20);  p.close();
+    return p;
+  }, []);
+  const rightEar = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(8, -10);  p.lineTo(4, -20);  p.lineTo(16, -21);  p.close();
+    return p;
+  }, []);
+
+  const eyeColor = sleeping ? '#3D6020' : '#1A3A0E';
+  return (
+    <Group>
+      {/* Leaf ears */}
+      <Path path={leftEar}  color="#5AA832" />
+      <Path path={rightEar} color="#5AA832" />
+      {/* Body */}
+      <RoundedRect x={-13} y={-10} width={26} height={20} r={10} color="#8AC659" />
+      {/* Body highlight */}
+      <RoundedRect x={-10} y={-9}  width={10} height={5}  r={3}  color="rgba(255,255,255,0.28)" />
+      {/* Eyes — closed when sleeping */}
+      {sleeping ? (
+        <>
+          <Rect x={-8} y={-4} width={6} height={1.5} r={1} color={eyeColor} />
+          <Rect x={2}  y={-4} width={6} height={1.5} r={1} color={eyeColor} />
+        </>
+      ) : (
+        <>
+          <Circle cx={-5} cy={-3} r={2.5} color={eyeColor} />
+          <Circle cx={5}  cy={-3} r={2.5} color={eyeColor} />
+          <Circle cx={-4} cy={-4} r={1}   color="rgba(255,255,255,0.6)" />
+          <Circle cx={6}  cy={-4} r={1}   color="rgba(255,255,255,0.6)" />
+        </>
+      )}
+      {/* Nose */}
+      <Circle cx={0} cy={3} r={1.5} color="#5AA832" />
+    </Group>
+  );
+}
+
+function BroutardBody({ sleeping }: { sleeping: boolean }) {
+  const leftHorn = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-8, -11);  p.lineTo(-13, -21);  p.lineTo(-5, -20);  p.close();
+    return p;
+  }, []);
+  const rightHorn = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(8, -11);  p.lineTo(5, -20);  p.lineTo(13, -21);  p.close();
+    return p;
+  }, []);
+
+  const eyeColor = sleeping ? '#4A2A00' : '#3D1A00';
+  return (
+    <Group>
+      {/* Horns */}
+      <Path path={leftHorn}  color="#8B6040" />
+      <Path path={rightHorn} color="#8B6040" />
+      {/* Body */}
+      <RoundedRect x={-15} y={-11} width={30} height={22} r={7} color="#C8956A" />
+      {/* Body highlight */}
+      <RoundedRect x={-12} y={-10} width={11} height={5} r={3} color="rgba(255,255,255,0.22)" />
+      {/* Snout */}
+      <RoundedRect x={-7}  y={2}   width={14} height={9}  r={4} color="#A07040" />
+      {/* Nostrils */}
+      <Circle cx={-3} cy={6} r={1.5} color="#5C3A10" />
+      <Circle cx={3}  cy={6} r={1.5} color="#5C3A10" />
+      {/* Eyes */}
+      {sleeping ? (
+        <>
+          <Rect x={-9} y={-4} width={6} height={2} r={1} color={eyeColor} />
+          <Rect x={3}  y={-4} width={6} height={2} r={1} color={eyeColor} />
+        </>
+      ) : (
+        <>
+          <Circle cx={-6} cy={-3} r={3}   color={eyeColor} />
+          <Circle cx={6}  cy={-3} r={3}   color={eyeColor} />
+          <Circle cx={-5} cy={-4} r={1.2} color="rgba(255,255,255,0.55)" />
+          <Circle cx={7}  cy={-4} r={1.2} color="rgba(255,255,255,0.55)" />
+        </>
+      )}
+    </Group>
+  );
+}
+
+function BoussinBody({ sleeping }: { sleeping: boolean }) {
+  // Flower petal path on top of head
+  const flowerPath = useMemo(() => {
+    const p = Skia.Path.Make();
+    // 4 small petals around center
+    for (let i = 0; i < 4; i++) {
+      const angle = (i * Math.PI) / 2;
+      const cx    = Math.cos(angle) * 4.5;
+      const cy    = Math.sin(angle) * 4.5;
+      p.addCircle(cx - 1, cy - 18, 2.8);
+    }
+    return p;
+  }, []);
+
+  const eyeColor = sleeping ? '#2A001A' : '#1E0010';
+  return (
+    <Group>
+      {/* Ears */}
+      <Circle cx={-11} cy={-12} r={5.5} color="#F9A8D4" />
+      <Circle cx={11}  cy={-12} r={5.5} color="#F9A8D4" />
+      <Circle cx={-11} cy={-12} r={2.5} color="#EC4899" />
+      <Circle cx={11}  cy={-12} r={2.5} color="#EC4899" />
+      {/* Body */}
+      <Circle cx={0}   cy={0}   r={13}  color="#F9A8D4" />
+      {/* Body highlight */}
+      <Circle cx={-5}  cy={-6}  r={4}   color="rgba(255,255,255,0.30)" />
+      {/* Flower */}
+      <Path path={flowerPath} color="#FBBF24" />
+      <Circle cx={0} cy={-18} r={2} color="#FEF08A" />
+      {/* Eyes */}
+      {sleeping ? (
+        <>
+          <Rect x={-8} y={-4} width={5} height={1.5} r={1} color={eyeColor} />
+          <Rect x={3}  y={-4} width={5} height={1.5} r={1} color={eyeColor} />
+        </>
+      ) : (
+        <>
+          <Circle cx={-5} cy={-3} r={2.5} color={eyeColor} />
+          <Circle cx={5}  cy={-3} r={2.5} color={eyeColor} />
+          <Circle cx={-4} cy={-4} r={1}   color="rgba(255,255,255,0.7)" />
+          <Circle cx={6}  cy={-4} r={1}   color="rgba(255,255,255,0.7)" />
+        </>
+      )}
+      {/* Smile */}
+      {!sleeping && <Rect x={-3} y={4} width={6} height={1.5} r={1} color="#EC4899" />}
+    </Group>
+  );
+}
+
+function MelliorBody({ sleeping }: { sleeping: boolean }) {
+  const leftAntenna = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-5, -8);  p.quadTo(-10, -14, -8, -18);
+    return p;
+  }, []);
+  const rightAntenna = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(5, -8);  p.quadTo(10, -14, 8, -18);
+    return p;
+  }, []);
+
+  const eyeColor = sleeping ? '#2A1400' : '#1A0A00';
+  return (
+    <Group>
+      {/* Wings (behind body) */}
+      <RoundedRect x={-22} y={-16} width={11} height={14} r={5.5} color="rgba(186,230,255,0.70)" />
+      <RoundedRect x={11}  y={-16} width={11} height={14} r={5.5} color="rgba(186,230,255,0.70)" />
+      {/* Body */}
+      <RoundedRect x={-12} y={-8} width={24} height={16} r={8} color="#FCD34D" />
+      {/* Body highlight */}
+      <RoundedRect x={-9} y={-7} width={9} height={4} r={3} color="rgba(255,255,255,0.35)" />
+      {/* Stripes */}
+      <Rect x={-10} y={-2} width={20} height={2} color="rgba(146,64,14,0.45)" />
+      <Rect x={-9}  y={3}  width={18} height={2} color="rgba(146,64,14,0.35)" />
+      {/* Antennae */}
+      <Path path={leftAntenna}  color="#92400E" style="stroke" strokeWidth={1.5} strokeCap="round" />
+      <Path path={rightAntenna} color="#92400E" style="stroke" strokeWidth={1.5} strokeCap="round" />
+      {/* Antenna tips */}
+      <Circle cx={-8}  cy={-18} r={2} color="#F59E0B" />
+      <Circle cx={8}   cy={-18} r={2} color="#F59E0B" />
+      {/* Eyes */}
+      {sleeping ? (
+        <>
+          <Rect x={-7} y={-4} width={4} height={1.5} r={1} color={eyeColor} />
+          <Rect x={3}  y={-4} width={4} height={1.5} r={1} color={eyeColor} />
+        </>
+      ) : (
+        <>
+          <Circle cx={-5} cy={-2} r={2.5} color={eyeColor} />
+          <Circle cx={5}  cy={-2} r={2.5} color={eyeColor} />
+          <Circle cx={-4} cy={-3} r={1}   color="rgba(255,255,255,0.6)" />
+          <Circle cx={6}  cy={-3} r={1}   color="rgba(255,255,255,0.6)" />
+        </>
+      )}
+    </Group>
+  );
+}
+
+function FlottinBody({ sleeping }: { sleeping: boolean }) {
+  const tailPath = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(13, -3);  p.lineTo(20, -9);  p.lineTo(22, 0);  p.lineTo(20, 9);  p.lineTo(13, 3);
+    p.close();
+    return p;
+  }, []);
+  const dorsalFin = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-6, -9);  p.lineTo(0, -16);  p.lineTo(6, -9);  p.close();
+    return p;
+  }, []);
+  const mouthPath = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-13, 2);  p.quadTo(-15, 5, -13, 7);
+    return p;
+  }, []);
+
+  const eyeWhite = sleeping ? '#CCE8FF' : '#FFFFFF';
+  const eyeDark  = sleeping ? '#101030' : '#1A1A3E';
+  return (
+    <Group>
+      {/* Tail fin */}
+      <Path path={tailPath}  color="#0EA5E9" />
+      {/* Body */}
+      <RoundedRect x={-13} y={-9} width={26} height={18} r={9} color="#38BDF8" />
+      {/* Body highlight */}
+      <Circle cx={-4} cy={-4} r={5} color="rgba(255,255,255,0.25)" />
+      {/* Dorsal fin */}
+      <Path path={dorsalFin} color="#0EA5E9" />
+      {/* Scales hint */}
+      <Rect x={-5} y={-2} width={10} height={1.5} r={1} color="rgba(14,165,233,0.35)" />
+      <Rect x={-3} y={2}  width={8}  height={1.5} r={1} color="rgba(14,165,233,0.30)" />
+      {/* Eyes — fish have big round eyes */}
+      <Circle cx={-7} cy={-1} r={5}   color={eyeWhite} />
+      {sleeping ? (
+        <Rect x={-11} y={-2} width={8} height={2} r={1} color={eyeDark} />
+      ) : (
+        <>
+          <Circle cx={-7} cy={-1} r={3}   color={eyeDark} />
+          <Circle cx={-6} cy={-2} r={1.2} color="rgba(255,255,255,0.85)" />
+        </>
+      )}
+      {/* Mouth */}
+      <Path path={mouthPath} color="#0EA5E9" style="stroke" strokeWidth={1.5} strokeCap="round" />
+    </Group>
+  );
+}
+
+function SirpioBody({ sleeping }: { sleeping: boolean }) {
+  const finCrest = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-12, -7);  p.lineTo(-8, -15);  p.lineTo(-4, -7);
+    p.lineTo(0,   -13); p.lineTo(4,   -7);
+    p.lineTo(8,   -11); p.lineTo(12,  -7);
+    return p;
+  }, []);
+  const tailFin = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(15, 0);  p.lineTo(22, -7);  p.lineTo(22, 7);  p.close();
+    return p;
+  }, []);
+
+  const eyeDark = sleeping ? '#002A15' : '#001A0A';
+  return (
+    <Group>
+      {/* Tail fin */}
+      <Path path={tailFin}  color="#059669" />
+      {/* Body (elongated) */}
+      <RoundedRect x={-16} y={-7} width={32} height={14} r={7} color="#10B981" />
+      {/* Head bump */}
+      <Circle cx={-13} cy={0} r={8} color="#10B981" />
+      {/* Body highlight */}
+      <RoundedRect x={-12} y={-6} width={12} height={4} r={3} color="rgba(255,255,255,0.25)" />
+      {/* Fin crest */}
+      <Path
+        path={finCrest}
+        color="#059669"
+        style="stroke"
+        strokeWidth={2}
+        strokeCap="round"
+        strokeJoin="round"
+      />
+      {/* Scale stripe */}
+      <Rect x={-5} y={-1} width={14} height={1.5} r={1} color="rgba(5,150,105,0.40)" />
+      {/* Eye (serpentine — single visible) */}
+      <Circle cx={-13} cy={-1} r={3.5} color="white" />
+      {sleeping ? (
+        <Rect x={-16} y={-2} width={7} height={2} r={1} color={eyeDark} />
+      ) : (
+        <>
+          <Circle cx={-13} cy={-1} r={2.2} color={eyeDark} />
+          <Circle cx={-12} cy={-2} r={1}   color="rgba(255,255,255,0.8)" />
+        </>
+      )}
+    </Group>
+  );
+}
+
+/** Placeholder for species not yet fully illustrated */
+function FallbackBody({ speciesId, sleeping }: { speciesId: string; sleeping: boolean }) {
+  const species = SPECIES_MAP.get(speciesId);
+  const color   = species?.primaryColor ?? '#888';
+  const eyeColor = sleeping ? '#222' : '#111';
+  return (
+    <Group>
+      <RoundedRect x={-13} y={-10} width={26} height={20} r={10} color={color} />
+      <RoundedRect x={-10} y={-9}  width={10} height={5}  r={3}  color="rgba(255,255,255,0.25)" />
+      {sleeping ? (
+        <>
+          <Rect x={-7} y={-3} width={5} height={1.5} r={1} color={eyeColor} />
+          <Rect x={2}  y={-3} width={5} height={1.5} r={1} color={eyeColor} />
+        </>
+      ) : (
+        <>
+          <Circle cx={-4} cy={-2} r={2.5} color={eyeColor} />
+          <Circle cx={4}  cy={-2} r={2.5} color={eyeColor} />
+          <Circle cx={-3} cy={-3} r={1}   color="rgba(255,255,255,0.55)" />
+          <Circle cx={5}  cy={-3} r={1}   color="rgba(255,255,255,0.55)" />
+        </>
+      )}
+    </Group>
+  );
+}
+
+function SpeciesBody({ speciesId, sleeping, shiny }: {
+  speciesId: string;
+  sleeping: boolean;
+  shiny: boolean;
+}) {
+  let body: React.ReactElement;
+  switch (speciesId) {
+    case 'feuillon': body = <FeuillonBody sleeping={sleeping} />; break;
+    case 'broutard': body = <BroutardBody sleeping={sleeping} />; break;
+    case 'boussin':  body = <BoussinBody  sleeping={sleeping} />; break;
+    case 'mellior':  body = <MelliorBody  sleeping={sleeping} />; break;
+    case 'flottin':  body = <FlottinBody  sleeping={sleeping} />; break;
+    case 'sirpio':   body = <SirpioBody   sleeping={sleeping} />; break;
+    default:         body = <FallbackBody speciesId={speciesId} sleeping={sleeping} />; break;
+  }
+  return (
+    <Group>
+      {body}
+      {shiny    && <ShimmerOverlay />}
+      {sleeping && <SleepOverlay  />}
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CreatureSprite — main animated component
+// ---------------------------------------------------------------------------
+
+export interface CreatureSpriteProps {
+  creature: Creature;
+}
+
+const CreatureSprite = memo(function CreatureSprite({ creature }: CreatureSpriteProps) {
+  const isSleeping  = creature.state === 'sleeping';
+  const isStumbling = creature.state === 'stumbling';
+
+  // ── Pixel-position animation ─────────────────────────────────────────────
+  const posX = useSharedValue(creature.position.x);
+  const posY = useSharedValue(creature.position.y);
+
+  useEffect(() => {
+    const dx   = creature.targetPosition.x - posX.value;
+    const dy   = creature.targetPosition.y - posY.value;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 0.5) return;
+    const duration = (dist / TILE_SIZE) * 2000;
+    posX.value = withTiming(creature.targetPosition.x, {
+      duration,
+      easing: Easing.linear,
+    });
+    posY.value = withTiming(creature.targetPosition.y, {
+      duration,
+      easing: Easing.linear,
+    });
+  }, [creature.targetPosition.x, creature.targetPosition.y]);
+
+  // ── Body scale animation (sleeping / stumbling) ──────────────────────────
+  const bodyScale = useSharedValue(1.0);
+
+  useEffect(() => {
+    cancelAnimation(bodyScale);
+    if (isSleeping) {
+      bodyScale.value = withRepeat(
+        withSequence(
+          withTiming(1.03, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
+          withTiming(1.0,  { duration: 1000, easing: Easing.inOut(Easing.sin) }),
+        ),
+        -1,
+        false,
+      );
+    } else if (isStumbling) {
+      bodyScale.value = withSequence(
+        withTiming(1.22, { duration: 140, easing: Easing.out(Easing.back(2)) }),
+        withTiming(1.0,  { duration: 140, easing: Easing.in(Easing.quad)     }),
+      );
+    } else {
+      bodyScale.value = withTiming(1.0, { duration: 200 });
+    }
+    return () => cancelAnimation(bodyScale);
+  }, [creature.state]);
+
+  // ── Shiny animation ───────────────────────────────────────────────────────
+  const shimmerOp = useSharedValue(creature.isShiny ? 0.35 : 0);
+
+  useEffect(() => {
+    if (!creature.isShiny) { shimmerOp.value = 0; return; }
+    shimmerOp.value = withRepeat(
+      withSequence(
+        withTiming(0.75, { duration: 900 }),
+        withTiming(0.35, { duration: 900 }),
+      ),
+      -1,
+      false,
+    );
+    return () => cancelAnimation(shimmerOp);
+  }, [creature.isShiny]);
+
+  // ── Derived transforms ────────────────────────────────────────────────────
+  const posTransform = useDerivedValue(() => [
+    { translateX: posX.value },
+    { translateY: posY.value },
+  ]);
+
+  const bodyTransform = useDerivedValue(() => [
+    { scale: bodyScale.value },
+  ]);
+
+  return (
+    <Group transform={posTransform}>
+      {/* Body + species detail */}
+      <Group transform={bodyTransform}>
+        <SpeciesBody
+          speciesId={creature.speciesId}
+          sleeping={isSleeping}
+          shiny={creature.isShiny}
+        />
+      </Group>
+
+      {/* ZZZ bubbles (only while sleeping) */}
+      {isSleeping && <ZzzBubbles />}
+
+      {/* Heart particle (fires on each affection) */}
+      <HeartParticle trigger={creature.lastAffectedAt} />
+    </Group>
+  );
+});
+
+export default CreatureSprite;
