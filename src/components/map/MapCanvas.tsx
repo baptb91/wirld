@@ -5,6 +5,10 @@
  *   - Sky background (Animated.View, color interpolated by time period)
  *   - Creature layer (CreatureSprite components rendered inside Canvas)
  *   - Tap gesture → wake sleeping creature or show affection on active one
+ *
+ * Phase 3 additions:
+ *   - Habitat layer (HabitatBuilding components rendered inside Canvas)
+ *   - Habitat placement mode: tap places the selected habitat type
  */
 import React, { useCallback, useEffect, useRef } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
@@ -19,6 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useMapStore } from '../../store/mapStore';
 import { useCreatureStore } from '../../store/creatureStore';
+import { HABITAT_MAP } from '../../constants/habitats';
 import {
   TILE_SIZE,
   GRID_COLS,
@@ -29,6 +34,7 @@ import {
 import { getSkyProgress } from '../../engine/TimeEngine';
 import { useDayNight } from '../../hooks/useDayNight';
 import TerrainTile from './TerrainTile';
+import HabitatBuilding from './HabitatBuilding';
 import CreatureSprite from './CreatureSprite';
 import MiniMap from './MiniMap';
 
@@ -65,10 +71,14 @@ function clampTY(ty: number, sc: number): number {
 // ---------------------------------------------------------------------------
 
 export default function MapCanvas() {
-  const terrainGrid  = useMapStore((s) => s.terrainGrid);
-  const selectedTool = useMapStore((s) => s.selectedTool);
-  const paintTile    = useMapStore((s) => s.paintTile);
-  const creatures    = useCreatureStore((s) => s.creatures);
+  const terrainGrid      = useMapStore((s) => s.terrainGrid);
+  const selectedTool     = useMapStore((s) => s.selectedTool);
+  const selectedHabitat  = useMapStore((s) => s.selectedHabitat);
+  const paintTile        = useMapStore((s) => s.paintTile);
+  const habitats         = useMapStore((s) => s.habitats);
+  const placeHabitat     = useMapStore((s) => s.placeHabitat);
+  const selectHabitat    = useMapStore((s) => s.selectHabitat);
+  const creatures        = useCreatureStore((s) => s.creatures);
 
   const period = useDayNight();
 
@@ -76,7 +86,6 @@ export default function MapCanvas() {
   const skyProgress = useSharedValue(getSkyProgress());
 
   useEffect(() => {
-    // Smooth 30s transition to new sky progress when period changes
     skyProgress.value = withTiming(getSkyProgress(), { duration: 30_000 });
   }, [period]);
 
@@ -96,10 +105,19 @@ export default function MapCanvas() {
   const savedTY     = useSharedValue(0);
   const savedScale  = useSharedValue(1.0);
 
-  const isPaintMode = useSharedValue(false);
+  // Mode flags kept as SharedValues so gesture worklets can read them
+  const isPaintMode    = useSharedValue(false);
+  const isHabitatMode  = useSharedValue(false);
+
   useEffect(() => {
-    isPaintMode.value = selectedTool !== null;
+    isPaintMode.value   = selectedTool !== null;
+    isHabitatMode.value = false;
   }, [selectedTool]);
+
+  useEffect(() => {
+    isHabitatMode.value = selectedHabitat !== null;
+    isPaintMode.value   = false;
+  }, [selectedHabitat]);
 
   const lastPaintedTile = useRef<{ x: number; y: number } | null>(null);
 
@@ -124,6 +142,37 @@ export default function MapCanvas() {
     lastPaintedTile.current = null;
   }, []);
 
+  // ── Habitat placement handler ─────────────────────────────────────────────
+  const handleHabitatPlace = useCallback(
+    (sx: number, sy: number) => {
+      if (!selectedHabitat) return;
+      const def = HABITAT_MAP.get(selectedHabitat);
+      if (!def) return;
+
+      const worldX = (sx - translateX.value) / scale.value;
+      const worldY = (sy - translateY.value) / scale.value;
+
+      // Center the footprint on the tapped tile
+      const tapTileX = Math.floor(worldX / TILE_SIZE);
+      const tapTileY = Math.floor(worldY / TILE_SIZE);
+      const half     = Math.floor(def.tileSize / 2);
+      const tileX    = Math.max(0, tapTileX - half);
+      const tileY    = Math.max(0, tapTileY - half);
+
+      placeHabitat({
+        id: `habitat-${Date.now()}`,
+        habitatTypeId: selectedHabitat,
+        tileX,
+        tileY,
+        assignedCreatureIds: [],
+      });
+
+      // Deselect tool after single placement
+      selectHabitat(null);
+    },
+    [selectedHabitat, placeHabitat, selectHabitat, translateX, scale],
+  );
+
   // ── Creature tap handler ──────────────────────────────────────────────────
   const handleTap = useCallback(
     (sx: number, sy: number) => {
@@ -134,7 +183,6 @@ export default function MapCanvas() {
       const HIT_SQ = (TILE_SIZE * 0.9) ** 2;
 
       for (const c of cs) {
-        // Use targetPosition as the creature's best-known location
         const dx = c.targetPosition.x - worldX;
         const dy = c.targetPosition.y - worldY;
         if (dx * dx + dy * dy < HIT_SQ) {
@@ -162,12 +210,13 @@ export default function MapCanvas() {
 
   // ── Gestures ──────────────────────────────────────────────────────────────
 
-  // Tap gesture for creature interaction (navigate mode only)
   const tapGesture = Gesture.Tap()
     .maxDistance(12)
     .onEnd((e) => {
       'worklet';
-      if (!isPaintMode.value) {
+      if (isHabitatMode.value) {
+        runOnJS(handleHabitatPlace)(e.x, e.y);
+      } else if (!isPaintMode.value) {
         runOnJS(handleTap)(e.x, e.y);
       }
     });
@@ -221,7 +270,6 @@ export default function MapCanvas() {
       savedTY.value    = translateY.value;
     });
 
-  // Tap is exclusive with pan (short touch = tap, drag = pan), pinch is always simultaneous
   const combinedGesture = Gesture.Simultaneous(
     Gesture.Exclusive(tapGesture, panGesture),
     pinchGesture,
@@ -258,6 +306,16 @@ export default function MapCanvas() {
                   />
                 )),
               )}
+
+              {/* ── Habitat layer (above terrain, below creatures) ── */}
+              {habitats.map((h) => (
+                <HabitatBuilding
+                  key={h.id}
+                  x={h.tileX * TILE_SIZE}
+                  y={h.tileY * TILE_SIZE}
+                  typeId={h.habitatTypeId}
+                />
+              ))}
 
               {/* ── Creature layer ── */}
               {creatures.map((creature) => (

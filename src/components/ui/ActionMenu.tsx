@@ -1,11 +1,12 @@
 /**
  * ActionMenu — bottom slide-up tray.
- * Phase 1: shows terrain painting tools.
- * Tap a tool to select it (enters paint mode). Tap again to deselect (nav mode).
+ * Phase 1: terrain painting tools.
+ * Phase 3: Terrain / Habitats mode toggle — second tab shows all 8 habitat
+ *           type buttons. Selecting a habitat enters placement mode; the next
+ *           tap on the map places the habitat and auto-deselects.
  */
 import React, { useState } from 'react';
 import {
-  Animated as RNAnimated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,89 +15,158 @@ import {
 } from 'react-native';
 import { theme } from '../../constants/theme';
 import { TERRAIN_TYPES, TERRAIN_CONFIG, TerrainType } from '../../constants/terrain';
+import { HABITAT_TYPES } from '../../constants/habitats';
 import { useMapStore } from '../../store/mapStore';
 
+type MenuTab = 'terrain' | 'habitats';
+
 export default function ActionMenu() {
-  const { selectedTool, selectTool } = useMapStore();
-  const [expanded, setExpanded] = useState(false);
+  const { selectedTool, selectTool, selectedHabitat, selectHabitat } = useMapStore();
+  const [tab, setTab] = useState<MenuTab>('terrain');
+
+  const handleTabPress = (next: MenuTab) => {
+    setTab(next);
+    // Switching tabs clears any active selection in the other tab
+    if (next === 'terrain') selectHabitat(null);
+    if (next === 'habitats') selectTool(null);
+  };
 
   const handleToolPress = (type: TerrainType) => {
-    // Toggle: tap selected tool → back to nav mode
     selectTool(selectedTool === type ? null : type);
   };
 
+  const handleHabitatPress = (id: string) => {
+    selectHabitat(selectedHabitat === id ? null : id);
+  };
+
+  // Derive the mode-pill label
+  let modeLabel = 'Navigate';
+  if (tab === 'terrain' && selectedTool) {
+    modeLabel = `Painting: ${TERRAIN_CONFIG[selectedTool].label}`;
+  } else if (tab === 'habitats' && selectedHabitat) {
+    const def = HABITAT_TYPES.find((h) => h.id === selectedHabitat);
+    modeLabel = `Place: ${def?.name ?? selectedHabitat}`;
+  }
+
   return (
     <View style={styles.container} pointerEvents="box-none">
-      {/* Tool row — always visible */}
       <View style={styles.tray} pointerEvents="box-none">
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.toolRow}
-          pointerEvents="auto"
-        >
-          {TERRAIN_TYPES.map((type) => {
-            const cfg     = TERRAIN_CONFIG[type];
-            const active  = selectedTool === type;
-            return (
-              <Pressable
-                key={type}
-                onPress={() => handleToolPress(type)}
-                style={({ pressed }) => [
-                  styles.toolBtn,
-                  { borderColor: cfg.color },
-                  active  && { backgroundColor: cfg.color, transform: [{ scale: 1.08 }] },
-                  pressed && { opacity: 0.75 },
-                ]}
-              >
-                <Text style={styles.toolEmoji}>{cfg.emoji}</Text>
-                <Text
-                  style={[
-                    styles.toolLabel,
-                    active && styles.toolLabelActive,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {cfg.label}
-                </Text>
-                {active && (
-                  <Text style={styles.toolCost}>
-                    {cfg.costPerTile}G
-                  </Text>
-                )}
-              </Pressable>
-            );
-          })}
 
-          {/* Navigate button — clears tool selection */}
+        {/* ── Tab toggle ── */}
+        <View style={styles.tabRow} pointerEvents="auto">
           <Pressable
-            onPress={() => selectTool(null)}
-            style={({ pressed }) => [
-              styles.toolBtn,
-              styles.navBtn,
-              !selectedTool && styles.navBtnActive,
-              pressed && { opacity: 0.75 },
-            ]}
+            onPress={() => handleTabPress('terrain')}
+            style={[styles.tabBtn, tab === 'terrain' && styles.tabBtnActive]}
           >
-            <Text style={styles.toolEmoji}>🧭</Text>
-            <Text
-              style={[
-                styles.toolLabel,
-                !selectedTool && styles.toolLabelActive,
-              ]}
-            >
-              Move
+            <Text style={[styles.tabLabel, tab === 'terrain' && styles.tabLabelActive]}>
+              Terrain
             </Text>
           </Pressable>
-        </ScrollView>
+          <Pressable
+            onPress={() => handleTabPress('habitats')}
+            style={[styles.tabBtn, tab === 'habitats' && styles.tabBtnActive]}
+          >
+            <Text style={[styles.tabLabel, tab === 'habitats' && styles.tabLabelActive]}>
+              Habitats
+            </Text>
+          </Pressable>
+        </View>
 
-        {/* Mode label */}
+        {/* ── Tool / habitat row ── */}
+        {tab === 'terrain' && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.toolRow}
+            pointerEvents="auto"
+          >
+            {TERRAIN_TYPES.map((type) => {
+              const cfg    = TERRAIN_CONFIG[type];
+              const active = selectedTool === type;
+              return (
+                <Pressable
+                  key={type}
+                  onPress={() => handleToolPress(type)}
+                  style={({ pressed }) => [
+                    styles.toolBtn,
+                    { borderColor: cfg.color },
+                    active  && { backgroundColor: cfg.color, transform: [{ scale: 1.08 }] },
+                    pressed && { opacity: 0.75 },
+                  ]}
+                >
+                  <Text style={styles.toolEmoji}>{cfg.emoji}</Text>
+                  <Text
+                    style={[styles.toolLabel, active && styles.toolLabelWhite]}
+                    numberOfLines={1}
+                  >
+                    {cfg.label}
+                  </Text>
+                  {active && (
+                    <Text style={styles.toolCost}>{cfg.costPerTile}G</Text>
+                  )}
+                </Pressable>
+              );
+            })}
+
+            {/* Navigate button */}
+            <Pressable
+              onPress={() => selectTool(null)}
+              style={({ pressed }) => [
+                styles.toolBtn,
+                styles.navBtn,
+                !selectedTool && styles.navBtnActive,
+                pressed && { opacity: 0.75 },
+              ]}
+            >
+              <Text style={styles.toolEmoji}>🧭</Text>
+              <Text
+                style={[styles.toolLabel, !selectedTool && styles.toolLabelWhite]}
+              >
+                Move
+              </Text>
+            </Pressable>
+          </ScrollView>
+        )}
+
+        {tab === 'habitats' && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.toolRow}
+            pointerEvents="auto"
+          >
+            {HABITAT_TYPES.map((h) => {
+              const active = selectedHabitat === h.id;
+              return (
+                <Pressable
+                  key={h.id}
+                  onPress={() => handleHabitatPress(h.id)}
+                  style={({ pressed }) => [
+                    styles.toolBtn,
+                    styles.habitatBtn,
+                    active  && styles.habitatBtnActive,
+                    pressed && { opacity: 0.75 },
+                  ]}
+                >
+                  <Text style={styles.toolEmoji}>{h.emoji}</Text>
+                  <Text
+                    style={[styles.toolLabel, active && styles.toolLabelWhite]}
+                    numberOfLines={1}
+                  >
+                    {h.name}
+                  </Text>
+                  {active && (
+                    <Text style={styles.toolCost}>{h.baseCost}G</Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        {/* Mode label pill */}
         <View style={styles.modePill} pointerEvents="none">
-          <Text style={styles.modeText}>
-            {selectedTool
-              ? `Painting: ${TERRAIN_CONFIG[selectedTool].label}`
-              : 'Navigate'}
-          </Text>
+          <Text style={styles.modeText}>{modeLabel}</Text>
         </View>
       </View>
     </View>
@@ -114,7 +184,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(245,240,232,0.96)',
     borderTopLeftRadius: theme.radius.lg,
     borderTopRightRadius: theme.radius.lg,
-    paddingTop: 8,
+    paddingTop: 6,
     paddingBottom: 28,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -3 },
@@ -122,6 +192,35 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 12,
   },
+  // ── Tabs ──
+  tabRow: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginBottom: 6,
+    borderRadius: theme.radius.sm,
+    backgroundColor: 'rgba(80,60,20,0.10)',
+    padding: 3,
+    gap: 3,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 5,
+    borderRadius: theme.radius.sm - 2,
+    alignItems: 'center',
+  },
+  tabBtnActive: {
+    backgroundColor: theme.colors.green,
+  },
+  tabLabel: {
+    fontFamily: theme.fonts.body,
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    fontWeight: '600',
+  },
+  tabLabelActive: {
+    color: '#fff',
+  },
+  // ── Tool / habitat buttons ──
   toolRow: {
     flexDirection: 'row',
     paddingHorizontal: 12,
@@ -148,7 +247,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     textAlign: 'center',
   },
-  toolLabelActive: {
+  toolLabelWhite: {
     color: theme.colors.textLight,
     fontWeight: '700',
   },
@@ -164,6 +263,14 @@ const styles = StyleSheet.create({
   navBtnActive: {
     backgroundColor: theme.colors.green,
   },
+  habitatBtn: {
+    borderColor: theme.colors.gold,
+    width: 72,
+  },
+  habitatBtnActive: {
+    backgroundColor: theme.colors.gold,
+  },
+  // ── Mode pill ──
   modePill: {
     alignSelf: 'center',
     marginTop: 6,
