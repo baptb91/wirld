@@ -1,6 +1,8 @@
 import { Tabs } from 'expo-router';
 import { StyleSheet, Text } from 'react-native';
 import { theme } from '../../src/constants/theme';
+import { useGameLoop } from '../../src/hooks/useGameLoop';
+import { useCreatureAI } from '../../src/hooks/useCreatureAI';
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return (
@@ -11,6 +13,10 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 }
 
 export default function TabLayout() {
+  // Game-loop hooks live here so they run regardless of which tab is active
+  useGameLoop();
+  useCreatureAI();
+
   return (
     <Tabs
       screenOptions={{
