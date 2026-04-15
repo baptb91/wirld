@@ -3,7 +3,8 @@
  * All functions are side-effect free; they return new values for the store.
  */
 import { GRID_COLS, GRID_ROWS, TILE_SIZE } from '../constants/terrain';
-import { ScheduleType } from '../constants/creatures';
+import { ScheduleType, SPECIES_MAP } from '../constants/creatures';
+import { HABITAT_MAP } from '../constants/habitats';
 import { isCreatureActive } from './TimeEngine';
 
 export type CreatureState =
@@ -79,6 +80,39 @@ export function walkDuration(from: PixelPos, to: PixelPos): number {
  */
 export function randomPauseDuration(): number {
   return 2000 + Math.random() * 2000;
+}
+
+// ---------------------------------------------------------------------------
+// Sleep / wake decisions
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Habitat compatibility
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true when a creature species can use a given habitat type.
+ * Derives traits from the species definition: creature type (herbivore /
+ * carnivore / aquatic), schedule (nocturnal), and rarity (epic / legendary).
+ */
+export function isCreatureCompatibleWithHabitat(
+  speciesId: string,
+  habitatTypeId: string,
+): boolean {
+  const species = SPECIES_MAP.get(speciesId);
+  const habitat = HABITAT_MAP.get(habitatTypeId);
+  if (!species || !habitat) return false;
+
+  for (const tag of habitat.compatible) {
+    if (tag === 'any') return true;
+    if (tag === 'herbivore'  && species.type     === 'herbivore')  return true;
+    if (tag === 'carnivore'  && species.type     === 'carnivore')  return true;
+    if (tag === 'aquatic'    && species.type     === 'aquatic')    return true;
+    if (tag === 'nocturnal'  && species.schedule === 'nocturnal')  return true;
+    if (tag === 'epic'       && species.rarity   === 'epic')       return true;
+    if (tag === 'legendary'  && species.rarity   === 'legendary')  return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------

@@ -3,15 +3,59 @@
  *
  * Ticks every 2 s (movement) and every 60 s (sleep-cycle sync).
  * Pure AI decisions live in CreatureAI.ts; this hook wires them to the store.
+ *
+ * Auto-assign: when a creature falls asleep for the first time (no habitatId),
+ * we scan nearby compatible habitats and assign it to the closest one with
+ * available capacity (within AUTO_ASSIGN_RANGE tiles).
  */
 import { useEffect, useRef } from 'react';
-import { useCreatureStore } from '../store/creatureStore';
+import { useCreatureStore, Creature } from '../store/creatureStore';
+import { useMapStore } from '../store/mapStore';
+import { HABITAT_MAP } from '../constants/habitats';
+import { TILE_SIZE } from '../constants/terrain';
 import {
   pickWanderTarget,
   walkDuration,
   randomPauseDuration,
   resolveScheduleState,
+  isCreatureCompatibleWithHabitat,
 } from '../engine/CreatureAI';
+
+const AUTO_ASSIGN_RANGE_PX = 8 * TILE_SIZE; // 8-tile radius
+
+/** Find the nearest compatible, non-full habitat and assign the creature. */
+function autoAssignToHabitat(creature: Creature): void {
+  const { habitats, assignCreatureToHabitat } = useMapStore.getState();
+  const { updateCreature } = useCreatureStore.getState();
+
+  const cx = creature.targetPosition.x;
+  const cy = creature.targetPosition.y;
+
+  let bestHabitatId: string | null = null;
+  let bestDist = AUTO_ASSIGN_RANGE_PX;
+
+  for (const h of habitats) {
+    if (!isCreatureCompatibleWithHabitat(creature.speciesId, h.habitatTypeId)) continue;
+    const def = HABITAT_MAP.get(h.habitatTypeId);
+    if (!def) continue;
+    if (h.assignedCreatureIds.includes(creature.id)) continue;
+    if (h.assignedCreatureIds.length >= def.capacity) continue;
+
+    const habCX = (h.tileX + def.tileSize / 2) * TILE_SIZE;
+    const habCY = (h.tileY + def.tileSize / 2) * TILE_SIZE;
+    const dist = Math.hypot(cx - habCX, cy - habCY);
+
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestHabitatId = h.id;
+    }
+  }
+
+  if (bestHabitatId) {
+    assignCreatureToHabitat(bestHabitatId, creature.id);
+    updateCreature(creature.id, { habitatId: bestHabitatId });
+  }
+}
 
 const MOVE_TICK_MS  = 2_000;
 const SLEEP_TICK_MS = 60_000;
@@ -77,6 +121,8 @@ export function useCreatureAI(): void {
 
       if (change === 'sleeping') {
         updateCreature(c.id, { state: 'sleeping', sleepInterrupts: 0 });
+        // Auto-assign to nearest compatible habitat if not already housed
+        if (!c.habitatId) autoAssignToHabitat(c);
       } else {
         // Natural wake-up
         updateCreature(c.id, {

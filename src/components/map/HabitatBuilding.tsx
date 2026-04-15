@@ -8,6 +8,13 @@
  *   2×2 tiles = 96 × 96 px  (woodBurrow, leafNest, coveredPool, predatorDen,
  *                              rockCave, nightSanctuary, rarePalace)
  *   3×3 tiles = 144 × 144 px (communalCamp)
+ *
+ * Phase 3 step 4 additions:
+ *   - DoorPanel: animated door that slides away when open (progress=1) and
+ *     slides back to cover the entrance when closed (progress=0).
+ *     NightSanctuary inverts the logic (open at night).
+ *   - OccupancyDots: small circles showing filled / empty capacity slots.
+ *   - highlighted prop: green border when dragging a compatible creature.
  */
 import React, { memo, useMemo } from 'react';
 import {
@@ -19,22 +26,96 @@ import {
   RoundedRect,
   Skia,
 } from '@shopify/react-native-skia';
+import { useDerivedValue, SharedValue } from 'react-native-reanimated';
 import { TILE_SIZE } from '../../constants/terrain';
 import { HABITAT_MAP } from '../../constants/habitats';
 
 // ---------------------------------------------------------------------------
-// Selection highlight
+// Selection / drag-target highlight
 // ---------------------------------------------------------------------------
 
-function SelectionBorder({ w, h }: { w: number; h: number }) {
+function SelectionBorder({ w, h, color = 'rgba(253,224,71,0.90)' }: {
+  w: number;
+  h: number;
+  color?: string;
+}) {
   return (
     <Rect
       x={1} y={1}
       width={w - 2} height={h - 2}
-      color="rgba(253,224,71,0.90)"
+      color={color}
       style="stroke"
       strokeWidth={3}
     />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Occupancy dots  (filled = creature assigned, outlined = free slot)
+// ---------------------------------------------------------------------------
+
+function OccupancyDots({ w, occupancy, capacity }: {
+  w: number;
+  occupancy: number;
+  capacity: number;
+}) {
+  if (capacity === 0) return null;
+  return (
+    <Group>
+      {Array.from({ length: capacity }, (_, i) => (
+        <Circle
+          key={i}
+          cx={w - 8 - i * 10}
+          cy={8}
+          r={4}
+          color={i < occupancy ? '#34D399' : 'rgba(255,255,255,0.28)'}
+        />
+      ))}
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Door panel — slides off when open, slides in to cover entrance when closed
+// ---------------------------------------------------------------------------
+
+function DoorPanel({ w, h, openProgress, invert }: {
+  w: number;
+  h: number;
+  openProgress: SharedValue<number>;
+  /** NightSanctuary opens at night (progress=0) rather than day (progress=1) */
+  invert?: boolean;
+}) {
+  // When open → panel translates DOWN (off screen below habitat)
+  // closed (progress=0, or invert+progress=1) → panel at normal position, covering entrance
+  const transform = useDerivedValue(() => {
+    const prog = invert ? 1 - openProgress.value : openProgress.value;
+    return [{ translateY: prog * h * 0.6 }];
+  });
+
+  // Position: covers roughly the bottom 55% of the habitat footprint
+  const panelY  = h * 0.43;
+  const panelH  = h * 0.58;
+  const plankY1 = h * 0.48;
+  const plankY2 = h * 0.54;
+  const plankY3 = h * 0.60;
+
+  return (
+    <Group transform={transform}>
+      {/* Main door fill */}
+      <RoundedRect x={8} y={panelY} width={w - 16} height={panelH} r={10}
+                   color="rgba(12, 8, 3, 0.82)" />
+      {/* Horizontal wood grain planks */}
+      <RoundedRect x={14} y={plankY1} width={w - 28} height={5} r={2}
+                   color="rgba(101,63,30,0.72)" />
+      <RoundedRect x={14} y={plankY2} width={w - 28} height={5} r={2}
+                   color="rgba(80,50,20,0.72)" />
+      <RoundedRect x={14} y={plankY3} width={w - 28} height={5} r={2}
+                   color="rgba(101,63,30,0.65)" />
+      {/* Lock / latch knob */}
+      <Circle cx={w / 2} cy={h * 0.57} r={5.5} color="rgba(200,160,50,0.88)" />
+      <Circle cx={w / 2} cy={h * 0.57} r={2.5} color="rgba(130,90,20,0.92)" />
+    </Group>
   );
 }
 
@@ -394,10 +475,18 @@ function CommunalCamp() {
 // ---------------------------------------------------------------------------
 
 export interface HabitatBuildingProps {
-  x: number;        // canvas pixel — left edge of footprint
-  y: number;        // canvas pixel — top edge of footprint
+  x: number;                          // canvas pixel — left edge of footprint
+  y: number;                          // canvas pixel — top edge of footprint
   typeId: string;
   isSelected?: boolean;
+  /** Shared value: 1 = day-habitats open / night-habitats closed, 0 = vice-versa */
+  openProgress: SharedValue<number>;
+  /** Number of creatures currently assigned */
+  occupancy?: number;
+  /** Maximum capacity from the habitat definition */
+  capacity?: number;
+  /** True while the player is dragging a compatible creature onto the map */
+  highlighted?: boolean;
 }
 
 const HabitatBuilding = memo(function HabitatBuilding({
@@ -405,10 +494,14 @@ const HabitatBuilding = memo(function HabitatBuilding({
   y,
   typeId,
   isSelected = false,
+  openProgress,
+  occupancy = 0,
+  capacity = 0,
+  highlighted = false,
 }: HabitatBuildingProps) {
-  const def = HABITAT_MAP.get(typeId);
+  const def      = HABITAT_MAP.get(typeId);
   const tileSize = def?.tileSize ?? 2;
-  const W = tileSize * TILE_SIZE;
+  const W        = tileSize * TILE_SIZE;
 
   const transform = useMemo(
     () => [{ translateX: x }, { translateY: y }],
@@ -431,7 +524,21 @@ const HabitatBuilding = memo(function HabitatBuilding({
   return (
     <Group transform={transform}>
       {body}
-      {isSelected && <SelectionBorder w={W} h={W} />}
+
+      {/* Door panel — animates open/close; NightSanctuary inverts */}
+      <DoorPanel
+        w={W}
+        h={W}
+        openProgress={openProgress}
+        invert={typeId === 'nightSanctuary'}
+      />
+
+      {/* Occupancy dots — top-right corner */}
+      <OccupancyDots w={W} occupancy={occupancy} capacity={capacity} />
+
+      {/* Borders: drag-target highlight (green) takes priority over selection (yellow) */}
+      {highlighted && <SelectionBorder w={W} h={W} color="rgba(52,211,153,0.92)" />}
+      {isSelected && !highlighted && <SelectionBorder w={W} h={W} />}
     </Group>
   );
 });

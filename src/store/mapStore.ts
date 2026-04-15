@@ -40,6 +40,10 @@ export interface MapActions {
   placeBuilding: (placement: BuildingPlacement) => void;
   placeHabitat: (placement: HabitatPlacement) => void;
   removeHabitat: (id: string) => void;
+  /** Add a creature to a habitat's roster (respects capacity). */
+  assignCreatureToHabitat: (habitatId: string, creatureId: string) => void;
+  /** Remove a creature from a habitat's roster. */
+  unassignCreatureFromHabitat: (habitatId: string, creatureId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,6 +141,32 @@ export const useMapStore = create<MapState & MapActions>((set) => ({
   removeHabitat: (id) =>
     set((state) => ({
       habitats: state.habitats.filter((h) => h.id !== id),
+    })),
+
+  assignCreatureToHabitat: (habitatId, creatureId) =>
+    set((state) => {
+      const habitat = state.habitats.find((h) => h.id === habitatId);
+      if (!habitat) return state;
+      const def = HABITAT_MAP.get(habitat.habitatTypeId);
+      if (!def) return state;
+      if (habitat.assignedCreatureIds.includes(creatureId)) return state;
+      if (habitat.assignedCreatureIds.length >= def.capacity) return state;
+      return {
+        habitats: state.habitats.map((h) =>
+          h.id === habitatId
+            ? { ...h, assignedCreatureIds: [...h.assignedCreatureIds, creatureId] }
+            : h,
+        ),
+      };
+    }),
+
+  unassignCreatureFromHabitat: (habitatId, creatureId) =>
+    set((state) => ({
+      habitats: state.habitats.map((h) =>
+        h.id === habitatId
+          ? { ...h, assignedCreatureIds: h.assignedCreatureIds.filter((id) => id !== creatureId) }
+          : h,
+      ),
     })),
 }));
 

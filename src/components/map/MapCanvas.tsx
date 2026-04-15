@@ -9,21 +9,25 @@
  * Phase 3 additions:
  *   - Habitat layer (HabitatBuilding components rendered inside Canvas)
  *   - Habitat placement mode: tap places the selected habitat type
+ *   - Creature → habitat assignment via long-press drag-and-drop
+ *   - Habitat open/close door animation driven by day/night period
  */
-import React, { useCallback, useEffect, useRef } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Dimensions, StyleSheet, Text, View } from 'react-native';
 import { Canvas } from '@shopify/react-native-skia';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
   interpolateColor,
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
 import { useMapStore } from '../../store/mapStore';
-import { useCreatureStore } from '../../store/creatureStore';
+import { useCreatureStore, Creature } from '../../store/creatureStore';
 import { HABITAT_MAP } from '../../constants/habitats';
+import { SPECIES_MAP } from '../../constants/creatures';
+import { isCreatureCompatibleWithHabitat } from '../../engine/CreatureAI';
 import {
   TILE_SIZE,
   GRID_COLS,
@@ -97,6 +101,19 @@ export default function MapCanvas() {
     ),
   }));
 
+  // ── Habitat open/close progress ───────────────────────────────────────────
+  // 1.0 = daytime habitats open / nocturnal habitats closed
+  // 0.0 = daytime habitats closed / nocturnal habitats open
+  // NightSanctuary inverts this inside HabitatBuilding.
+  const habitatOpenProgress = useSharedValue(
+    (period === 'dawn' || period === 'day') ? 1 : 0,
+  );
+
+  useEffect(() => {
+    const target = (period === 'dawn' || period === 'day') ? 1 : 0;
+    habitatOpenProgress.value = withTiming(target, { duration: 25_000 });
+  }, [period]);
+
   // ── Camera shared values ─────────────────────────────────────────────────
   const translateX  = useSharedValue(0);
   const translateY  = useSharedValue(0);
@@ -108,6 +125,7 @@ export default function MapCanvas() {
   // Mode flags kept as SharedValues so gesture worklets can read them
   const isPaintMode    = useSharedValue(false);
   const isHabitatMode  = useSharedValue(false);
+  const isDraggingMode = useSharedValue(false);
 
   useEffect(() => {
     isPaintMode.value   = selectedTool !== null;
@@ -120,6 +138,42 @@ export default function MapCanvas() {
   }, [selectedHabitat]);
 
   const lastPaintedTile = useRef<{ x: number; y: number } | null>(null);
+
+  // ── Drag state ────────────────────────────────────────────────────────────
+  const dragX = useSharedValue(0);
+  const dragY = useSharedValue(0);
+  const draggingCreatureRef = useRef<Creature | null>(null);
+  const [draggingChip, setDraggingChip] = useState<{
+    name: string;
+    primaryColor: string;
+  } | null>(null);
+
+  // ── Compatible habitat IDs for drag highlight ─────────────────────────────
+  const compatibleHabitatIds = useMemo(() => {
+    if (!draggingChip) return new Set<string>();
+    const dragging = draggingCreatureRef.current;
+    if (!dragging) return new Set<string>();
+    return new Set(
+      habitats
+        .filter((h) => {
+          if (!isCreatureCompatibleWithHabitat(dragging.speciesId, h.habitatTypeId)) return false;
+          const def = HABITAT_MAP.get(h.habitatTypeId);
+          if (!def) return false;
+          const freeSlots =
+            def.capacity - h.assignedCreatureIds.filter((id) => id !== dragging.id).length;
+          return freeSlots > 0;
+        })
+        .map((h) => h.id),
+    );
+  }, [draggingChip, habitats]);
+
+  // ── Drag chip animated style ──────────────────────────────────────────────
+  const dragChipStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: dragX.value - 40 },
+      { translateY: dragY.value - 66 },
+    ],
+  }));
 
   // ── Paint helper ──────────────────────────────────────────────────────────
   const handlePaint = useCallback(
@@ -152,7 +206,6 @@ export default function MapCanvas() {
       const worldX = (sx - translateX.value) / scale.value;
       const worldY = (sy - translateY.value) / scale.value;
 
-      // Center the footprint on the tapped tile
       const tapTileX = Math.floor(worldX / TILE_SIZE);
       const tapTileY = Math.floor(worldY / TILE_SIZE);
       const half     = Math.floor(def.tileSize / 2);
@@ -167,7 +220,6 @@ export default function MapCanvas() {
         assignedCreatureIds: [],
       });
 
-      // Deselect tool after single placement
       selectHabitat(null);
     },
     [selectedHabitat, placeHabitat, selectHabitat, translateX, scale],
@@ -194,6 +246,84 @@ export default function MapCanvas() {
           return;
         }
       }
+    },
+    [translateX, scale],
+  );
+
+  // ── Long-press: start creature drag ──────────────────────────────────────
+  const handleLongPressCreature = useCallback(
+    (sx: number, sy: number) => {
+      if (isPaintMode.value || isHabitatMode.value) return;
+
+      const worldX = (sx - translateX.value) / scale.value;
+      const worldY = (sy - translateY.value) / scale.value;
+
+      const { creatures: cs } = useCreatureStore.getState();
+      const HIT_SQ = (TILE_SIZE * 1.1) ** 2;
+
+      for (const c of cs) {
+        const dx = c.targetPosition.x - worldX;
+        const dy = c.targetPosition.y - worldY;
+        if (dx * dx + dy * dy < HIT_SQ) {
+          draggingCreatureRef.current = c;
+          setDraggingChip({
+            name: c.name,
+            primaryColor: SPECIES_MAP.get(c.speciesId)?.primaryColor ?? '#888888',
+          });
+          dragX.value = sx;
+          dragY.value = sy;
+          isDraggingMode.value = true;
+          return;
+        }
+      }
+    },
+    [translateX, scale, isPaintMode, isHabitatMode, dragX, dragY, isDraggingMode],
+  );
+
+  // ── Drag end: hit-test habitats and assign ────────────────────────────────
+  const handleDragEnd = useCallback(
+    (sx: number, sy: number) => {
+      const creature = draggingCreatureRef.current;
+      draggingCreatureRef.current = null;
+      setDraggingChip(null);
+      if (!creature) return;
+
+      const worldX = (sx - translateX.value) / scale.value;
+      const worldY = (sy - translateY.value) / scale.value;
+
+      const {
+        habitats: hs,
+        assignCreatureToHabitat,
+        unassignCreatureFromHabitat,
+      } = useMapStore.getState();
+
+      for (const h of hs) {
+        const def = HABITAT_MAP.get(h.habitatTypeId);
+        if (!def) continue;
+
+        const hX = h.tileX * TILE_SIZE;
+        const hY = h.tileY * TILE_SIZE;
+        const hW = def.tileSize * TILE_SIZE;
+
+        if (worldX >= hX && worldX <= hX + hW && worldY >= hY && worldY <= hY + hW) {
+          if (!isCreatureCompatibleWithHabitat(creature.speciesId, h.habitatTypeId)) break;
+
+          const alreadyIn    = h.assignedCreatureIds.includes(creature.id);
+          const otherCount   = h.assignedCreatureIds.filter((id) => id !== creature.id).length;
+          if (!alreadyIn && otherCount >= def.capacity) break;
+
+          // Unassign from previous habitat if different
+          if (creature.habitatId && creature.habitatId !== h.id) {
+            unassignCreatureFromHabitat(creature.habitatId, creature.id);
+          }
+          if (!alreadyIn) {
+            assignCreatureToHabitat(h.id, creature.id);
+          }
+          useCreatureStore.getState().updateCreature(creature.id, { habitatId: h.id });
+          return;
+        }
+      }
+      // Dropped outside any valid target — no change
     },
     [translateX, scale],
   );
@@ -234,17 +364,42 @@ export default function MapCanvas() {
     })
     .onUpdate((e) => {
       'worklet';
-      if (isPaintMode.value) {
+      if (isDraggingMode.value) {
+        dragX.value = e.absoluteX;
+        dragY.value = e.absoluteY;
+      } else if (isPaintMode.value) {
         runOnJS(handlePaint)(e.x, e.y);
       } else {
         translateX.value = clampTX(savedTX.value + e.translationX, scale.value);
         translateY.value = clampTY(savedTY.value + e.translationY, scale.value);
       }
     })
-    .onEnd(() => {
+    .onEnd((e) => {
       'worklet';
-      savedTX.value = translateX.value;
-      savedTY.value = translateY.value;
+      if (isDraggingMode.value) {
+        runOnJS(handleDragEnd)(e.absoluteX, e.absoluteY);
+        isDraggingMode.value = false;
+      } else {
+        savedTX.value = translateX.value;
+        savedTY.value = translateY.value;
+      }
+    });
+
+  // Long-press identifies which creature to drag; pan (above) tracks movement
+  const longPressGesture = Gesture.LongPress()
+    .minDuration(450)
+    .maxDistance(12)
+    .onStart((e) => {
+      'worklet';
+      runOnJS(handleLongPressCreature)(e.x, e.y);
+    })
+    .onFinalize(() => {
+      'worklet';
+      // Ensure cleanup if the finger lifts before pan.onEnd fires
+      if (isDraggingMode.value) {
+        runOnJS(handleDragEnd)(dragX.value, dragY.value);
+        isDraggingMode.value = false;
+      }
     });
 
   const pinchGesture = Gesture.Pinch()
@@ -272,6 +427,7 @@ export default function MapCanvas() {
 
   const combinedGesture = Gesture.Simultaneous(
     Gesture.Exclusive(tapGesture, panGesture),
+    longPressGesture,
     pinchGesture,
   );
 
@@ -308,14 +464,21 @@ export default function MapCanvas() {
               )}
 
               {/* ── Habitat layer (above terrain, below creatures) ── */}
-              {habitats.map((h) => (
-                <HabitatBuilding
-                  key={h.id}
-                  x={h.tileX * TILE_SIZE}
-                  y={h.tileY * TILE_SIZE}
-                  typeId={h.habitatTypeId}
-                />
-              ))}
+              {habitats.map((h) => {
+                const def = HABITAT_MAP.get(h.habitatTypeId);
+                return (
+                  <HabitatBuilding
+                    key={h.id}
+                    x={h.tileX * TILE_SIZE}
+                    y={h.tileY * TILE_SIZE}
+                    typeId={h.habitatTypeId}
+                    openProgress={habitatOpenProgress}
+                    occupancy={h.assignedCreatureIds.length}
+                    capacity={def?.capacity ?? 0}
+                    highlighted={compatibleHabitatIds.has(h.id)}
+                  />
+                );
+              })}
 
               {/* ── Creature layer ── */}
               {creatures.map((creature) => (
@@ -335,6 +498,16 @@ export default function MapCanvas() {
         screenHeight={SCREEN_H}
         onNavigate={handleNavigate}
       />
+
+      {/* Drag chip — floating creature label that follows the finger */}
+      {draggingChip && (
+        <Animated.View
+          style={[styles.dragChip, dragChipStyle, { backgroundColor: draggingChip.primaryColor }]}
+          pointerEvents="none"
+        >
+          <Text style={styles.dragChipText}>{draggingChip.name}</Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -362,5 +535,26 @@ const styles = StyleSheet.create({
   canvas: {
     width: MAP_WIDTH,
     height: MAP_HEIGHT,
+  },
+  dragChip: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.30,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  dragChipText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 13,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 });
