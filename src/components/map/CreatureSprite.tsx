@@ -1,9 +1,10 @@
 /**
  * CreatureSprite — Skia-drawn animated creature rendering.
  *
- * Phase 2 fully implements 6 species:
- *   Feuillon, Broutard, Boussin, Mellior, Flottin, Sirpio
- * Remaining 12 species render a styled placeholder until their phases.
+ * Phase 2 fully implements 12 species:
+ *   Feuillon, Broutard, Boussin, Mellior, Flottin, Sirpio,
+ *   Rampex, Gribou, Crochon, Stalagor, Scorpilou, Dunor
+ * Remaining 6 species render a styled placeholder until their phases.
  *
  * All bodies are centered at (0, 0) in local space.
  * The outer Group's transform handles world-space positioning.
@@ -504,6 +505,349 @@ function SirpioBody({ sleeping }: { sleeping: boolean }) {
   );
 }
 
+function RampexBody({ sleeping }: { sleeping: boolean }) {
+  const tailPath = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(14, -2);
+    p.quadTo(22, -14, 18, -20);
+    p.quadTo(14, -26, 8, -18);
+    p.close();
+    return p;
+  }, []);
+
+  const eyeColor = sleeping ? '#3D1800' : '#2A0A00';
+  return (
+    <Group>
+      {/* Bushy tail */}
+      <Path path={tailPath} color="#6B4423" />
+      {/* Round ears */}
+      <Circle cx={-10} cy={-16} r={6.5} color="#8B5E3C" />
+      <Circle cx={10}  cy={-16} r={6.5} color="#8B5E3C" />
+      <Circle cx={-10} cy={-16} r={3}   color="#5C3A1E" />
+      <Circle cx={10}  cy={-16} r={3}   color="#5C3A1E" />
+      {/* Body */}
+      <RoundedRect x={-14} y={-11} width={28} height={22} r={9} color="#8B5E3C" />
+      {/* Belly patch */}
+      <RoundedRect x={-7}  y={-4}  width={14} height={12} r={6} color="rgba(255,220,180,0.30)" />
+      {/* Body highlight */}
+      <RoundedRect x={-11} y={-10} width={10} height={5}  r={3} color="rgba(255,255,255,0.20)" />
+      {/* Snout */}
+      <RoundedRect x={-8} y={4} width={16} height={8} r={4} color="#6B4423" />
+      {/* Nostrils */}
+      <Circle cx={-3} cy={8} r={1.5} color="#3D1800" />
+      <Circle cx={3}  cy={8} r={1.5} color="#3D1800" />
+      {/* Eyes */}
+      {sleeping ? (
+        <>
+          <Rect x={-9} y={-4} width={6} height={2} r={1} color={eyeColor} />
+          <Rect x={3}  y={-4} width={6} height={2} r={1} color={eyeColor} />
+        </>
+      ) : (
+        <>
+          <Circle cx={-6} cy={-3} r={3}   color={eyeColor} />
+          <Circle cx={6}  cy={-3} r={3}   color={eyeColor} />
+          <Circle cx={-5} cy={-4} r={1.2} color="rgba(255,255,255,0.55)" />
+          <Circle cx={7}  cy={-4} r={1.2} color="rgba(255,255,255,0.55)" />
+        </>
+      )}
+    </Group>
+  );
+}
+
+function GribouBody({ sleeping }: { sleeping: boolean }) {
+  const capPath = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-16, -10);
+    p.quadTo(-12, -28, 0, -30);
+    p.quadTo(12, -28, 16, -10);
+    p.close();
+    return p;
+  }, []);
+
+  const eyeColor = sleeping ? '#1A0040' : '#0D0020';
+  return (
+    <Group>
+      {/* Mushroom cap */}
+      <Path path={capPath} color="#5B21B6" />
+      {/* Cap underside rim */}
+      <Rect x={-16} y={-12} width={32} height={3} r={2} color="rgba(200,180,255,0.35)" />
+      {/* Cap spots */}
+      <Circle cx={-5}  cy={-22} r={2.5} color="rgba(255,255,255,0.65)" />
+      <Circle cx={4}   cy={-25} r={2}   color="rgba(255,255,255,0.65)" />
+      <Circle cx={9}   cy={-18} r={1.8} color="rgba(255,255,255,0.65)" />
+      <Circle cx={-10} cy={-19} r={1.5} color="rgba(255,255,255,0.65)" />
+      {/* Stem / neck join */}
+      <RoundedRect x={-5} y={-12} width={10} height={6} r={3} color="#7C3AED" />
+      {/* Body */}
+      <Circle cx={0} cy={0} r={12} color="#7C3AED" />
+      {/* Body highlight */}
+      <Circle cx={-5} cy={-5} r={4} color="rgba(255,255,255,0.22)" />
+      {/* Stubby arms */}
+      <Circle cx={-14} cy={2} r={4.5} color="#7C3AED" />
+      <Circle cx={14}  cy={2} r={4.5} color="#7C3AED" />
+      {/* Eyes */}
+      {sleeping ? (
+        <>
+          <Rect x={-7} y={-3} width={5} height={1.5} r={1} color={eyeColor} />
+          <Rect x={2}  y={-3} width={5} height={1.5} r={1} color={eyeColor} />
+        </>
+      ) : (
+        <>
+          <Circle cx={-4} cy={-2} r={3}   color={eyeColor} />
+          <Circle cx={4}  cy={-2} r={3}   color={eyeColor} />
+          {/* Glowing crepuscular iris */}
+          <Circle cx={-4} cy={-2} r={1.4} color="rgba(200,160,255,0.9)" />
+          <Circle cx={4}  cy={-2} r={1.4} color="rgba(200,160,255,0.9)" />
+        </>
+      )}
+    </Group>
+  );
+}
+
+function CrochonBody({ sleeping }: { sleeping: boolean }) {
+  const shellPath = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-10, 5);
+    p.quadTo(-12, -10, 0, -14);
+    p.quadTo(14, -10, 14, 5);
+    p.close();
+    return p;
+  }, []);
+  const ridge1 = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-1, 4); p.quadTo(-3, -8, 0, -13);
+    return p;
+  }, []);
+  const ridge2 = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(5, 4); p.quadTo(7, -7, 9, -10);
+    return p;
+  }, []);
+
+  const eyeColor = sleeping ? '#1A2510' : '#0A150A';
+  return (
+    <Group>
+      {/* Underbelly */}
+      <RoundedRect x={-10} y={3} width={24} height={9} r={5} color="#8A9A7A" />
+      {/* Rocky shell */}
+      <Path path={shellPath} color="#6A7A5A" />
+      {/* Shell highlight */}
+      <Circle cx={-1} cy={-7} r={4} color="rgba(255,255,255,0.18)" />
+      {/* Shell ridges */}
+      <Path path={ridge1} color="rgba(50,60,40,0.45)" style="stroke" strokeWidth={1.5} strokeCap="round" />
+      <Path path={ridge2} color="rgba(50,60,40,0.38)" style="stroke" strokeWidth={1.5} strokeCap="round" />
+      {/* Head */}
+      <Circle cx={-14} cy={0} r={8} color="#8A9A7A" />
+      {/* Head highlight */}
+      <Circle cx={-17} cy={-4} r={2.5} color="rgba(255,255,255,0.22)" />
+      {/* Eye */}
+      {sleeping ? (
+        <Rect x={-19} y={-2} width={7} height={2} r={1} color={eyeColor} />
+      ) : (
+        <>
+          <Circle cx={-16} cy={-1} r={3}   color={eyeColor} />
+          <Circle cx={-15} cy={-2} r={1.2} color="rgba(255,255,255,0.50)" />
+        </>
+      )}
+      {/* Jaw line */}
+      <Rect x={-20} y={4} width={9} height={1.2} r={1} color={eyeColor} />
+    </Group>
+  );
+}
+
+function StalagorBody({ sleeping }: { sleeping: boolean }) {
+  const leftWing = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-8, -4);
+    p.lineTo(-22, -12);
+    p.lineTo(-18, 6);
+    p.close();
+    return p;
+  }, []);
+  const rightWing = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(8, -4);
+    p.lineTo(22, -12);
+    p.lineTo(18, 6);
+    p.close();
+    return p;
+  }, []);
+  const crystal1 = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-5, -10); p.lineTo(-2, -22); p.lineTo(1, -10); p.close();
+    return p;
+  }, []);
+  const crystal2 = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(2, -10); p.lineTo(6, -20); p.lineTo(9, -10); p.close();
+    return p;
+  }, []);
+
+  const eyeColor = sleeping ? '#071830' : '#020E1C';
+  return (
+    <Group>
+      {/* Wings */}
+      <Path path={leftWing}  color="rgba(30,58,95,0.82)" />
+      <Path path={rightWing} color="rgba(30,58,95,0.82)" />
+      {/* Wing membrane lines */}
+      <Path path={leftWing}  color="rgba(37,99,235,0.28)" style="stroke" strokeWidth={0.8} />
+      <Path path={rightWing} color="rgba(37,99,235,0.28)" style="stroke" strokeWidth={0.8} />
+      {/* Body */}
+      <RoundedRect x={-11} y={-9} width={22} height={18} r={9} color="#1E3A5F" />
+      {/* Body highlight */}
+      <RoundedRect x={-8} y={-8} width={8} height={4} r={3} color="rgba(37,99,235,0.35)" />
+      {/* Crystal spikes */}
+      <Path path={crystal1} color="#2563EB" />
+      <Path path={crystal2} color="#3B82F6" />
+      {/* Crystal glow tips */}
+      <Circle cx={-1}  cy={-21} r={2.2} color="rgba(147,197,253,0.90)" />
+      <Circle cx={5.5} cy={-19} r={1.8} color="rgba(147,197,253,0.90)" />
+      {/* Large nocturnal eyes */}
+      {sleeping ? (
+        <>
+          <Rect x={-8} y={-3} width={6} height={2} r={1} color={eyeColor} />
+          <Rect x={2}  y={-3} width={6} height={2} r={1} color={eyeColor} />
+        </>
+      ) : (
+        <>
+          <Circle cx={-5} cy={-2} r={4.5} color="white" />
+          <Circle cx={5}  cy={-2} r={4.5} color="white" />
+          <Circle cx={-5} cy={-2} r={2.8} color={eyeColor} />
+          <Circle cx={5}  cy={-2} r={2.8} color={eyeColor} />
+          <Circle cx={-4} cy={-3} r={1.2} color="rgba(147,197,253,0.85)" />
+          <Circle cx={6}  cy={-3} r={1.2} color="rgba(147,197,253,0.85)" />
+        </>
+      )}
+    </Group>
+  );
+}
+
+function ScorpilouBody({ sleeping }: { sleeping: boolean }) {
+  const tailPath = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(10, -2);
+    p.quadTo(18, -2, 20, -10);
+    p.quadTo(22, -18, 14, -20);
+    p.quadTo(10, -22, 8, -16);
+    return p;
+  }, []);
+  const leftClaw = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-10, 2);
+    p.lineTo(-18, -4);
+    p.lineTo(-22, 0);
+    p.lineTo(-18, 4);
+    p.lineTo(-10, 6);
+    p.close();
+    return p;
+  }, []);
+  const rightClaw = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(10, 2);
+    p.lineTo(18, -4);
+    p.lineTo(22, 0);
+    p.lineTo(18, 4);
+    p.lineTo(10, 6);
+    p.close();
+    return p;
+  }, []);
+
+  const eyeColor = sleeping ? '#400A00' : '#2A0500';
+  return (
+    <Group>
+      {/* Claws */}
+      <Path path={leftClaw}  color="#EA580C" />
+      <Path path={rightClaw} color="#EA580C" />
+      {/* Curved tail — drawn as thick stroke */}
+      <Path path={tailPath} color="#F97316" style="stroke" strokeWidth={5} strokeCap="round" strokeJoin="round" />
+      {/* Stinger */}
+      <Circle cx={8}  cy={-16} r={3}   color="#EA580C" />
+      <Circle cx={6}  cy={-20} r={2}   color="#7F1D1D" />
+      {/* Segmented abdomen */}
+      <RoundedRect x={-4}  y={-2}  width={14} height={12} r={5}  color="#F97316" />
+      <Rect        x={-3}  y={4}   width={12} height={1.5} r={1}  color="rgba(234,88,12,0.55)" />
+      {/* Main body */}
+      <RoundedRect x={-13} y={-8}  width={22} height={16} r={8}  color="#F97316" />
+      {/* Body highlight */}
+      <Circle cx={-5} cy={-4} r={5} color="rgba(255,255,255,0.20)" />
+      {/* Eyes */}
+      {sleeping ? (
+        <>
+          <Rect x={-7} y={-3} width={4} height={1.5} r={1} color={eyeColor} />
+          <Rect x={2}  y={-3} width={4} height={1.5} r={1} color={eyeColor} />
+        </>
+      ) : (
+        <>
+          <Circle cx={-5} cy={-2} r={2.5} color={eyeColor} />
+          <Circle cx={4}  cy={-2} r={2.5} color={eyeColor} />
+          <Circle cx={-4} cy={-3} r={1}   color="rgba(255,150,50,0.85)" />
+          <Circle cx={5}  cy={-3} r={1}   color="rgba(255,150,50,0.85)" />
+        </>
+      )}
+    </Group>
+  );
+}
+
+function DunorBody({ sleeping }: { sleeping: boolean }) {
+  const frillPath = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-12, -7);
+    p.lineTo(-10, -15); p.lineTo(-6, -8);
+    p.lineTo(-2,  -14); p.lineTo(2,  -8);
+    p.lineTo(6,   -13); p.lineTo(10, -8);
+    p.lineTo(12,  -7);
+    return p;
+  }, []);
+  const tailPath = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(14, 0);
+    p.quadTo(20, 5, 24, 0);
+    p.quadTo(20, -5, 14, 0);
+    p.close();
+    return p;
+  }, []);
+
+  const eyeColor = sleeping ? '#2A1200' : '#1A0900';
+  return (
+    <Group>
+      {/* Wide flat tail */}
+      <Path path={tailPath} color="#B45309" />
+      {/* Wide flat body */}
+      <RoundedRect x={-16} y={-7} width={32} height={14} r={7} color="#D97706" />
+      {/* Body highlight */}
+      <RoundedRect x={-13} y={-6} width={13} height={4} r={3} color="rgba(255,255,255,0.20)" />
+      {/* Dorsal frill */}
+      <Path
+        path={frillPath}
+        color="#92400E"
+        style="stroke"
+        strokeWidth={2.5}
+        strokeCap="round"
+        strokeJoin="round"
+      />
+      {/* Scale rows */}
+      <Rect x={-6} y={-1} width={12} height={1.5} r={1} color="rgba(146,64,14,0.35)" />
+      <Rect x={-4} y={3}  width={9}  height={1.5} r={1} color="rgba(146,64,14,0.30)" />
+      {/* Head / snout block */}
+      <RoundedRect x={-22} y={-6} width={12} height={12} r={5} color="#D97706" />
+      {/* Jaw line */}
+      <Rect x={-22} y={2} width={13} height={1.5} r={1} color="#92400E" />
+      {/* Eye */}
+      {sleeping ? (
+        <Rect x={-20} y={-3} width={6} height={2} r={1} color={eyeColor} />
+      ) : (
+        <>
+          <Circle cx={-17} cy={-2} r={3.5} color="white" />
+          <Circle cx={-17} cy={-2} r={2.2} color={eyeColor} />
+          <Circle cx={-16} cy={-3} r={1}   color="rgba(255,200,80,0.85)" />
+        </>
+      )}
+      {/* Nostril */}
+      <Circle cx={-23} cy={2} r={1.2} color="#92400E" />
+    </Group>
+  );
+}
+
 /** Placeholder for species not yet fully illustrated */
 function FallbackBody({ speciesId, sleeping }: { speciesId: string; sleeping: boolean }) {
   const species = SPECIES_MAP.get(speciesId);
@@ -542,8 +886,14 @@ function SpeciesBody({ speciesId, sleeping, shiny }: {
     case 'boussin':  body = <BoussinBody  sleeping={sleeping} />; break;
     case 'mellior':  body = <MelliorBody  sleeping={sleeping} />; break;
     case 'flottin':  body = <FlottinBody  sleeping={sleeping} />; break;
-    case 'sirpio':   body = <SirpioBody   sleeping={sleeping} />; break;
-    default:         body = <FallbackBody speciesId={speciesId} sleeping={sleeping} />; break;
+    case 'sirpio':    body = <SirpioBody    sleeping={sleeping} />; break;
+    case 'rampex':    body = <RampexBody    sleeping={sleeping} />; break;
+    case 'gribou':    body = <GribouBody    sleeping={sleeping} />; break;
+    case 'crochon':   body = <CrochonBody   sleeping={sleeping} />; break;
+    case 'stalagor':  body = <StalagorBody  sleeping={sleeping} />; break;
+    case 'scorpilou': body = <ScorpilouBody sleeping={sleeping} />; break;
+    case 'dunor':     body = <DunorBody     sleeping={sleeping} />; break;
+    default:          body = <FallbackBody speciesId={speciesId} sleeping={sleeping} />; break;
   }
   return (
     <Group>
