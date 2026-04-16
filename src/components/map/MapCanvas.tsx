@@ -13,7 +13,10 @@
  *   - Habitat open/close door animation driven by day/night period
  *   - Plant layer (PlantSprite components) between terrain and habitats
  *   - Plant placement mode: tap places the selected plant type (no auto-deselect)
- *   - Plant tap: water if not mature, harvest if mature
+ *   - Plant tap: water if not mature, harvest if mature → adds to resourceStore
+ *   - Building layer (WarehouseBuilding) above habitats
+ *   - Building placement mode: tap places the selected building type
+ *   - Warehouse tap: opens WarehousePanel resource inventory overlay
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
@@ -29,7 +32,9 @@ import Animated, {
 import { useMapStore } from '../../store/mapStore';
 import { useCreatureStore, Creature } from '../../store/creatureStore';
 import { usePlantStore } from '../../store/plantStore';
+import { useResourceStore } from '../../store/resourceStore';
 import { HABITAT_MAP } from '../../constants/habitats';
+import { BUILDING_MAP } from '../../constants/buildings';
 import { SPECIES_MAP } from '../../constants/creatures';
 import { PLANT_MAP, MANUAL_WATER_AMOUNT } from '../../constants/plants';
 import { isCreatureCompatibleWithHabitat } from '../../engine/CreatureAI';
@@ -46,6 +51,8 @@ import TerrainTile from './TerrainTile';
 import HabitatBuilding from './HabitatBuilding';
 import PlantSprite from './PlantSprite';
 import CreatureSprite from './CreatureSprite';
+import WarehouseBuilding from './WarehouseBuilding';
+import WarehousePanel from '../ui/WarehousePanel';
 import MiniMap from './MiniMap';
 
 // ---------------------------------------------------------------------------
@@ -81,16 +88,22 @@ function clampTY(ty: number, sc: number): number {
 // ---------------------------------------------------------------------------
 
 export default function MapCanvas() {
-  const terrainGrid      = useMapStore((s) => s.terrainGrid);
-  const selectedTool     = useMapStore((s) => s.selectedTool);
-  const selectedHabitat  = useMapStore((s) => s.selectedHabitat);
-  const paintTile        = useMapStore((s) => s.paintTile);
-  const habitats         = useMapStore((s) => s.habitats);
-  const placeHabitat     = useMapStore((s) => s.placeHabitat);
-  const selectHabitat    = useMapStore((s) => s.selectHabitat);
-  const creatures        = useCreatureStore((s) => s.creatures);
-  const plants           = usePlantStore((s) => s.plants);
+  const terrainGrid       = useMapStore((s) => s.terrainGrid);
+  const selectedTool      = useMapStore((s) => s.selectedTool);
+  const selectedHabitat   = useMapStore((s) => s.selectedHabitat);
+  const selectedBuilding  = useMapStore((s) => s.selectedBuilding);
+  const paintTile         = useMapStore((s) => s.paintTile);
+  const habitats          = useMapStore((s) => s.habitats);
+  const buildings         = useMapStore((s) => s.buildings);
+  const placeHabitat      = useMapStore((s) => s.placeHabitat);
+  const placeBuilding     = useMapStore((s) => s.placeBuilding);
+  const selectHabitat     = useMapStore((s) => s.selectHabitat);
+  const selectBuilding    = useMapStore((s) => s.selectBuilding);
+  const creatures         = useCreatureStore((s) => s.creatures);
+  const plants            = usePlantStore((s) => s.plants);
   const selectedPlantType = usePlantStore((s) => s.selectedPlantType);
+
+  const [warehousePanelOpen, setWarehousePanelOpen] = useState(false);
 
   const period = useDayNight();
 
@@ -134,27 +147,38 @@ export default function MapCanvas() {
   const isPaintMode    = useSharedValue(false);
   const isHabitatMode  = useSharedValue(false);
   const isPlantMode    = useSharedValue(false);
+  const isBuildingMode = useSharedValue(false);
   const isDraggingMode = useSharedValue(false);
 
   useEffect(() => {
     isPaintMode.value   = selectedTool !== null;
     isHabitatMode.value = false;
-    if (selectedTool !== null) isPlantMode.value = false;
+    if (selectedTool !== null) { isPlantMode.value = false; isBuildingMode.value = false; }
   }, [selectedTool]);
 
   useEffect(() => {
     isHabitatMode.value = selectedHabitat !== null;
     isPaintMode.value   = false;
-    if (selectedHabitat !== null) isPlantMode.value = false;
+    if (selectedHabitat !== null) { isPlantMode.value = false; isBuildingMode.value = false; }
   }, [selectedHabitat]);
 
   useEffect(() => {
     isPlantMode.value = selectedPlantType !== null;
     if (selectedPlantType !== null) {
-      isPaintMode.value   = false;
-      isHabitatMode.value = false;
+      isPaintMode.value    = false;
+      isHabitatMode.value  = false;
+      isBuildingMode.value = false;
     }
   }, [selectedPlantType]);
+
+  useEffect(() => {
+    isBuildingMode.value = selectedBuilding !== null;
+    if (selectedBuilding !== null) {
+      isPaintMode.value   = false;
+      isHabitatMode.value = false;
+      isPlantMode.value   = false;
+    }
+  }, [selectedBuilding]);
 
   const lastPaintedTile = useRef<{ x: number; y: number } | null>(null);
 
@@ -244,6 +268,33 @@ export default function MapCanvas() {
     [selectedHabitat, placeHabitat, selectHabitat, translateX, scale],
   );
 
+  // ── Building placement handler ────────────────────────────────────────────
+  const handleBuildingPlace = useCallback(
+    (sx: number, sy: number) => {
+      const { selectedBuilding: typeId } = useMapStore.getState();
+      if (!typeId) return;
+      const def = BUILDING_MAP.get(typeId);
+      if (!def) return;
+
+      const worldX = (sx - translateX.value) / scale.value;
+      const worldY = (sy - translateY.value) / scale.value;
+      const tapTileX = Math.floor(worldX / TILE_SIZE);
+      const tapTileY = Math.floor(worldY / TILE_SIZE);
+      const half     = Math.floor(def.tileSize / 2);
+      const tileX    = Math.max(0, tapTileX - half);
+      const tileY    = Math.max(0, tapTileY - half);
+
+      placeBuilding({
+        id: `building-${Date.now()}`,
+        buildingTypeId: typeId,
+        tileX,
+        tileY,
+      });
+      selectBuilding(null);
+    },
+    [placeBuilding, selectBuilding, translateX, scale],
+  );
+
   // ── Plant placement handler ───────────────────────────────────────────────
   const handlePlantPlace = useCallback(
     (sx: number, sy: number) => {
@@ -304,9 +355,28 @@ export default function MapCanvas() {
         const dy = plantCY - worldY;
         if (dx * dx + dy * dy < PLANT_HIT_SQ) {
           if (plant.state === 'mature') {
-            harvestPlant(plant.id);
+            const result = harvestPlant(plant.id);
+            if (result) {
+              useResourceStore.getState().addResource(result.resourceId, result.resourceAmount);
+            }
           } else {
             waterPlant(plant.id, MANUAL_WATER_AMOUNT);
+          }
+          return;
+        }
+      }
+
+      // Check buildings — open warehouse panel
+      const { buildings: bs } = useMapStore.getState();
+      for (const b of bs) {
+        const def = BUILDING_MAP.get(b.buildingTypeId);
+        if (!def) continue;
+        const bX = b.tileX * TILE_SIZE;
+        const bY = b.tileY * TILE_SIZE;
+        const bW = def.tileSize * TILE_SIZE;
+        if (worldX >= bX && worldX <= bX + bW && worldY >= bY && worldY <= bY + bW) {
+          if (b.buildingTypeId === 'warehouse') {
+            setWarehousePanelOpen(true);
           }
           return;
         }
@@ -413,6 +483,8 @@ export default function MapCanvas() {
         runOnJS(handleHabitatPlace)(e.x, e.y);
       } else if (isPlantMode.value) {
         runOnJS(handlePlantPlace)(e.x, e.y);
+      } else if (isBuildingMode.value) {
+        runOnJS(handleBuildingPlace)(e.x, e.y);
       } else if (!isPaintMode.value) {
         runOnJS(handleTap)(e.x, e.y);
       }
@@ -559,6 +631,16 @@ export default function MapCanvas() {
                 );
               })}
 
+              {/* ── Building layer (above habitats, below creatures) ── */}
+              {buildings.map((b) => (
+                <WarehouseBuilding
+                  key={b.id}
+                  x={b.tileX * TILE_SIZE}
+                  y={b.tileY * TILE_SIZE}
+                  isSelected={selectedBuilding === b.buildingTypeId}
+                />
+              ))}
+
               {/* ── Creature layer ── */}
               {creatures.map((creature) => (
                 <CreatureSprite key={creature.id} creature={creature} />
@@ -587,6 +669,12 @@ export default function MapCanvas() {
           <Text style={styles.dragChipText}>{draggingChip.name}</Text>
         </Animated.View>
       )}
+
+      {/* Warehouse resource panel */}
+      <WarehousePanel
+        visible={warehousePanelOpen}
+        onClose={() => setWarehousePanelOpen(false)}
+      />
     </View>
   );
 }

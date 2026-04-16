@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { TerrainType, GRID_COLS, GRID_ROWS } from '../constants/terrain';
 import { HABITAT_MAP } from '../constants/habitats';
+import { BUILDING_MAP } from '../constants/buildings';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,6 +29,8 @@ export interface MapState {
   selectedTool: TerrainType | null;
   /** Currently selected habitat type to place (null = not placing) */
   selectedHabitat: string | null;
+  /** Currently selected building type to place (null = not placing) */
+  selectedBuilding: string | null;
   buildings: BuildingPlacement[];
   habitats: HabitatPlacement[];
 }
@@ -37,6 +40,7 @@ export interface MapActions {
   paintRect: (x1: number, y1: number, x2: number, y2: number, type: TerrainType) => void;
   selectTool: (type: TerrainType | null) => void;
   selectHabitat: (id: string | null) => void;
+  selectBuilding: (id: string | null) => void;
   placeBuilding: (placement: BuildingPlacement) => void;
   placeHabitat: (placement: HabitatPlacement) => void;
   removeHabitat: (id: string) => void;
@@ -72,6 +76,7 @@ export const useMapStore = create<MapState & MapActions>((set) => ({
   terrainGrid: createInitialGrid(),
   selectedTool: null,
   selectedHabitat: null,
+  selectedBuilding: null,
   buildings: [],
   habitats: [],
 
@@ -102,15 +107,44 @@ export const useMapStore = create<MapState & MapActions>((set) => ({
   },
 
   selectTool: (type) =>
-    // Selecting a terrain tool clears any pending habitat selection
-    set({ selectedTool: type, selectedHabitat: null }),
+    set({ selectedTool: type, selectedHabitat: null, selectedBuilding: null }),
 
   selectHabitat: (id) =>
-    // Selecting a habitat clears any active terrain tool
-    set({ selectedHabitat: id, selectedTool: null }),
+    set({ selectedHabitat: id, selectedTool: null, selectedBuilding: null }),
+
+  selectBuilding: (id) =>
+    set({ selectedBuilding: id, selectedTool: null, selectedHabitat: null }),
 
   placeBuilding: (placement) =>
-    set((state) => ({ buildings: [...state.buildings, placement] })),
+    set((state) => {
+      const def = BUILDING_MAP.get(placement.buildingTypeId);
+      if (!def) return state;
+      const sz = def.tileSize;
+
+      // Bounds check
+      if (
+        placement.tileX < 0 || placement.tileX + sz > GRID_COLS ||
+        placement.tileY < 0 || placement.tileY + sz > GRID_ROWS
+      ) return state;
+
+      // Overlap vs existing buildings
+      const buildingOverlap = state.buildings.some((b) => {
+        const bDef = BUILDING_MAP.get(b.buildingTypeId);
+        if (!bDef) return false;
+        return rectsOverlap(placement.tileX, placement.tileY, sz, b.tileX, b.tileY, bDef.tileSize);
+      });
+      if (buildingOverlap) return state;
+
+      // Overlap vs existing habitats
+      const habitatOverlap = state.habitats.some((h) => {
+        const hDef = HABITAT_MAP.get(h.habitatTypeId);
+        if (!hDef) return false;
+        return rectsOverlap(placement.tileX, placement.tileY, sz, h.tileX, h.tileY, hDef.tileSize);
+      });
+      if (habitatOverlap) return state;
+
+      return { buildings: [...state.buildings, placement] };
+    }),
 
   placeHabitat: (placement) =>
     set((state) => {

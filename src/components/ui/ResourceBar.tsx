@@ -1,58 +1,80 @@
 /**
- * ResourceBar — top-left HUD showing Gold | Seeds | Meat | Crystals.
- * Phase 1: reads from a simple resource store (placeholder values).
+ * ResourceBar — top HUD strip.
+ * Shows gold (always pinned first) + up to 4 highest non-zero resources,
+ * sorted by value descending. Scrollable horizontally if more resources exist.
  */
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { theme } from '../../constants/theme';
+import { useResourceStore } from '../../store/resourceStore';
+import {
+  RESOURCE_DISPLAY,
+  RESOURCE_DISPLAY_FALLBACK,
+} from '../../constants/resourceDisplay';
 
-interface ResourceBarProps {
-  gold?: number;
-  seeds?: number;
-  meat?: number;
-  crystals?: number;
+const MAX_SHOWN = 4; // non-gold resource pills to show before scroll
+
+function formatAmount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
 }
 
-export default function ResourceBar({
-  gold = 0,
-  seeds = 0,
-  meat = 0,
-  crystals = 0,
-}: ResourceBarProps) {
+export default function ResourceBar() {
+  const gold      = useResourceStore((s) => s.gold);
+  const resources = useResourceStore((s) => s.resources);
+
+  // Top non-zero resources sorted by value desc
+  const topResources = Object.entries(resources)
+    .filter(([, v]) => v > 0)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, MAX_SHOWN);
+
   return (
-    <View style={styles.bar} pointerEvents="none">
-      <Pill icon="💰" value={gold}     color="#D4A017" />
-      <Pill icon="🌱" value={seeds}    color="#4A7C59" />
-      <Pill icon="🥩" value={meat}     color="#C0392B" />
-      <Pill icon="💎" value={crystals} color="#6C63FF" />
+    <View style={styles.wrapper} pointerEvents="none">
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.bar}
+      >
+        {/* Gold — always first */}
+        <Pill emoji="💰" value={gold} color="#D4A017" />
+
+        {topResources.map(([id, value]) => {
+          const d = RESOURCE_DISPLAY[id] ?? RESOURCE_DISPLAY_FALLBACK;
+          return <Pill key={id} emoji={d.emoji} value={value} color={d.color} />;
+        })}
+      </ScrollView>
     </View>
   );
 }
 
-function Pill({ icon, value, color }: { icon: string; value: number; color: string }) {
+function Pill({ emoji, value, color }: { emoji: string; value: number; color: string }) {
   return (
     <View style={[styles.pill, { borderColor: color }]}>
-      <Text style={styles.pillIcon}>{icon}</Text>
-      <Text style={[styles.pillValue, { color }]}>
-        {value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(value)}
-      </Text>
+      <Text style={styles.pillIcon}>{emoji}</Text>
+      <Text style={[styles.pillValue, { color }]}>{formatAmount(value)}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bar: {
+  wrapper: {
     position: 'absolute',
     top: 12,
     left: 12,
+    right: 12,
+  },
+  bar: {
     flexDirection: 'row',
     gap: 6,
+    alignItems: 'center',
   },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: 'rgba(245,240,232,0.90)',
+    backgroundColor: 'rgba(245,240,232,0.92)',
     borderWidth: 1.5,
     borderRadius: theme.radius.xl,
     paddingHorizontal: 8,

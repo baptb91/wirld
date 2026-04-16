@@ -18,22 +18,23 @@ import { theme } from '../../constants/theme';
 import { TERRAIN_TYPES, TERRAIN_CONFIG, TerrainType } from '../../constants/terrain';
 import { HABITAT_TYPES } from '../../constants/habitats';
 import { PLANT_TYPES } from '../../constants/plants';
+import { BUILDING_TYPES } from '../../constants/buildings';
 import { useMapStore } from '../../store/mapStore';
 import { usePlantStore } from '../../store/plantStore';
 
-type MenuTab = 'terrain' | 'habitats' | 'plants';
+type MenuTab = 'terrain' | 'habitats' | 'plants' | 'buildings';
 
 export default function ActionMenu() {
-  const { selectedTool, selectTool, selectedHabitat, selectHabitat } = useMapStore();
+  const { selectedTool, selectTool, selectedHabitat, selectHabitat, selectedBuilding, selectBuilding } = useMapStore();
   const { selectedPlantType, selectPlantType } = usePlantStore();
   const [tab, setTab] = useState<MenuTab>('terrain');
 
   const handleTabPress = (next: MenuTab) => {
     setTab(next);
-    // Switching tabs clears any active selection in the other tab
-    if (next === 'terrain')  { selectHabitat(null); selectPlantType(null); }
-    if (next === 'habitats') { selectTool(null);    selectPlantType(null); }
-    if (next === 'plants')   { selectTool(null);    selectHabitat(null);   }
+    if (next === 'terrain')   { selectHabitat(null); selectPlantType(null); selectBuilding(null); }
+    if (next === 'habitats')  { selectTool(null);    selectPlantType(null); selectBuilding(null); }
+    if (next === 'plants')    { selectTool(null);    selectHabitat(null);   selectBuilding(null); }
+    if (next === 'buildings') { selectTool(null);    selectHabitat(null);   selectPlantType(null); }
   };
 
   const handleToolPress = (type: TerrainType) => {
@@ -48,6 +49,10 @@ export default function ActionMenu() {
     selectPlantType(selectedPlantType === id ? null : id);
   };
 
+  const handleBuildingPress = (id: string) => {
+    selectBuilding(selectedBuilding === id ? null : id);
+  };
+
   // Derive the mode-pill label
   let modeLabel = 'Navigate';
   if (tab === 'terrain' && selectedTool) {
@@ -58,6 +63,9 @@ export default function ActionMenu() {
   } else if (tab === 'plants' && selectedPlantType) {
     const def = PLANT_TYPES.find((p) => p.id === selectedPlantType);
     modeLabel = `Plant: ${def?.name ?? selectedPlantType}`;
+  } else if (tab === 'buildings' && selectedBuilding) {
+    const def = BUILDING_TYPES.find((b) => b.id === selectedBuilding);
+    modeLabel = `Place: ${def?.name ?? selectedBuilding}`;
   }
 
   return (
@@ -88,6 +96,14 @@ export default function ActionMenu() {
           >
             <Text style={[styles.tabLabel, tab === 'plants' && styles.tabLabelActive]}>
               Plants
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => handleTabPress('buildings')}
+            style={[styles.tabBtn, tab === 'buildings' && styles.tabBtnActive]}
+          >
+            <Text style={[styles.tabLabel, tab === 'buildings' && styles.tabLabelActive]}>
+              Build
             </Text>
           </Pressable>
         </View>
@@ -220,6 +236,42 @@ export default function ActionMenu() {
           </ScrollView>
         )}
 
+        {tab === 'buildings' && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.toolRow}
+            pointerEvents="auto"
+          >
+            {BUILDING_TYPES.map((b) => {
+              const active = selectedBuilding === b.id;
+              return (
+                <Pressable
+                  key={b.id}
+                  onPress={() => handleBuildingPress(b.id)}
+                  style={({ pressed }) => [
+                    styles.toolBtn,
+                    styles.buildingBtn,
+                    active  && styles.buildingBtnActive,
+                    pressed && { opacity: 0.75 },
+                  ]}
+                >
+                  <Text style={styles.toolEmoji}>{b.emoji}</Text>
+                  <Text
+                    style={[styles.toolLabel, active && styles.toolLabelWhite]}
+                    numberOfLines={1}
+                  >
+                    {b.name}
+                  </Text>
+                  {active && (
+                    <Text style={styles.toolCost}>{b.baseCost}G</Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
+
         {/* Mode label pill */}
         <View style={styles.modePill} pointerEvents="none">
           <Text style={styles.modeText}>{modeLabel}</Text>
@@ -332,6 +384,13 @@ const styles = StyleSheet.create({
   },
   plantBtnActive: {
     backgroundColor: '#5AAD5A',
+  },
+  buildingBtn: {
+    borderColor: '#8B5E3C',
+    width: 72,
+  },
+  buildingBtnActive: {
+    backgroundColor: '#8B5E3C',
   },
   // ── Mode pill ──
   modePill: {
