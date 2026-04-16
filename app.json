@@ -13,16 +13,14 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.baptiste.wilds",
-      "deploymentTarget": "15.0"
+      "bundleIdentifier": "com.baptiste.wilds"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#4A7C59"
       },
-      "package": "com.baptiste.wilds",
-      "minSdkVersion": 26
+      "package": "com.baptiste.wilds"
     },
     "web": {
       "bundler": "metro",
