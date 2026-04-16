@@ -11,8 +11,11 @@
 import { useEffect, useRef } from 'react';
 import { useCreatureStore, Creature } from '../store/creatureStore';
 import { useMapStore } from '../store/mapStore';
+import { usePlantStore } from '../store/plantStore';
 import { HABITAT_MAP } from '../constants/habitats';
+import { SPECIES_MAP } from '../constants/creatures';
 import { TILE_SIZE } from '../constants/terrain';
+import { AUTO_WATER_AMOUNT, AUTO_WATER_RANGE_TILES } from '../constants/plants';
 import {
   pickWanderTarget,
   walkDuration,
@@ -105,6 +108,29 @@ export function useCreatureAI(): void {
         nextMoveAt: now + walkMs + pauseMs,
       });
     });
+
+    // ── Auto-watering by active aquatic creatures ─────────────────────────
+    const { plants, waterPlant } = usePlantStore.getState();
+    if (plants.length > 0) {
+      const { creatures: activeCreatures } = useCreatureStore.getState();
+      const RANGE_PX = AUTO_WATER_RANGE_TILES * TILE_SIZE;
+      const RANGE_SQ = RANGE_PX * RANGE_PX;
+
+      for (const c of activeCreatures) {
+        if (c.state !== 'active') continue;
+        if (SPECIES_MAP.get(c.speciesId)?.type !== 'aquatic') continue;
+        for (const plant of plants) {
+          if (plant.state === 'mature') continue;
+          const plantCX = (plant.tileX + 0.5) * TILE_SIZE;
+          const plantCY = (plant.tileY + 0.5) * TILE_SIZE;
+          const dx = c.targetPosition.x - plantCX;
+          const dy = c.targetPosition.y - plantCY;
+          if (dx * dx + dy * dy <= RANGE_SQ) {
+            waterPlant(plant.id, AUTO_WATER_AMOUNT);
+          }
+        }
+      }
+    }
   };
 
   // ── Sleep/wake tick (60 s) ────────────────────────────────────────────

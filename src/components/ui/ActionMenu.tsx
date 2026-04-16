@@ -1,9 +1,10 @@
 /**
  * ActionMenu — bottom slide-up tray.
  * Phase 1: terrain painting tools.
- * Phase 3: Terrain / Habitats mode toggle — second tab shows all 8 habitat
- *           type buttons. Selecting a habitat enters placement mode; the next
- *           tap on the map places the habitat and auto-deselects.
+ * Phase 3: Terrain / Habitats / Plants tabs.
+ *           Selecting a habitat enters placement mode; the next tap places it.
+ *           Selecting a plant type enters placement mode; tapping plants them
+ *           (no auto-deselect — allows multi-placement).
  */
 import React, { useState } from 'react';
 import {
@@ -16,19 +17,23 @@ import {
 import { theme } from '../../constants/theme';
 import { TERRAIN_TYPES, TERRAIN_CONFIG, TerrainType } from '../../constants/terrain';
 import { HABITAT_TYPES } from '../../constants/habitats';
+import { PLANT_TYPES } from '../../constants/plants';
 import { useMapStore } from '../../store/mapStore';
+import { usePlantStore } from '../../store/plantStore';
 
-type MenuTab = 'terrain' | 'habitats';
+type MenuTab = 'terrain' | 'habitats' | 'plants';
 
 export default function ActionMenu() {
   const { selectedTool, selectTool, selectedHabitat, selectHabitat } = useMapStore();
+  const { selectedPlantType, selectPlantType } = usePlantStore();
   const [tab, setTab] = useState<MenuTab>('terrain');
 
   const handleTabPress = (next: MenuTab) => {
     setTab(next);
     // Switching tabs clears any active selection in the other tab
-    if (next === 'terrain') selectHabitat(null);
-    if (next === 'habitats') selectTool(null);
+    if (next === 'terrain')  { selectHabitat(null); selectPlantType(null); }
+    if (next === 'habitats') { selectTool(null);    selectPlantType(null); }
+    if (next === 'plants')   { selectTool(null);    selectHabitat(null);   }
   };
 
   const handleToolPress = (type: TerrainType) => {
@@ -39,6 +44,10 @@ export default function ActionMenu() {
     selectHabitat(selectedHabitat === id ? null : id);
   };
 
+  const handlePlantPress = (id: string) => {
+    selectPlantType(selectedPlantType === id ? null : id);
+  };
+
   // Derive the mode-pill label
   let modeLabel = 'Navigate';
   if (tab === 'terrain' && selectedTool) {
@@ -46,6 +55,9 @@ export default function ActionMenu() {
   } else if (tab === 'habitats' && selectedHabitat) {
     const def = HABITAT_TYPES.find((h) => h.id === selectedHabitat);
     modeLabel = `Place: ${def?.name ?? selectedHabitat}`;
+  } else if (tab === 'plants' && selectedPlantType) {
+    const def = PLANT_TYPES.find((p) => p.id === selectedPlantType);
+    modeLabel = `Plant: ${def?.name ?? selectedPlantType}`;
   }
 
   return (
@@ -68,6 +80,14 @@ export default function ActionMenu() {
           >
             <Text style={[styles.tabLabel, tab === 'habitats' && styles.tabLabelActive]}>
               Habitats
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => handleTabPress('plants')}
+            style={[styles.tabBtn, tab === 'plants' && styles.tabBtnActive]}
+          >
+            <Text style={[styles.tabLabel, tab === 'plants' && styles.tabLabelActive]}>
+              Plants
             </Text>
           </Pressable>
         </View>
@@ -157,6 +177,42 @@ export default function ActionMenu() {
                   </Text>
                   {active && (
                     <Text style={styles.toolCost}>{h.baseCost}G</Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        {tab === 'plants' && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.toolRow}
+            pointerEvents="auto"
+          >
+            {PLANT_TYPES.map((p) => {
+              const active = selectedPlantType === p.id;
+              return (
+                <Pressable
+                  key={p.id}
+                  onPress={() => handlePlantPress(p.id)}
+                  style={({ pressed }) => [
+                    styles.toolBtn,
+                    styles.plantBtn,
+                    active  && styles.plantBtnActive,
+                    pressed && { opacity: 0.75 },
+                  ]}
+                >
+                  <Text style={styles.toolEmoji}>{p.emoji}</Text>
+                  <Text
+                    style={[styles.toolLabel, active && styles.toolLabelWhite]}
+                    numberOfLines={1}
+                  >
+                    {p.name}
+                  </Text>
+                  {active && (
+                    <Text style={styles.toolCost}>{p.baseCost}G</Text>
                   )}
                 </Pressable>
               );
@@ -269,6 +325,13 @@ const styles = StyleSheet.create({
   },
   habitatBtnActive: {
     backgroundColor: theme.colors.gold,
+  },
+  plantBtn: {
+    borderColor: '#5AAD5A',
+    width: 72,
+  },
+  plantBtnActive: {
+    backgroundColor: '#5AAD5A',
   },
   // ── Mode pill ──
   modePill: {

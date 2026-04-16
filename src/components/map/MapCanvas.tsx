@@ -11,6 +11,9 @@
  *   - Habitat placement mode: tap places the selected habitat type
  *   - Creature → habitat assignment via long-press drag-and-drop
  *   - Habitat open/close door animation driven by day/night period
+ *   - Plant layer (PlantSprite components) between terrain and habitats
+ *   - Plant placement mode: tap places the selected plant type (no auto-deselect)
+ *   - Plant tap: water if not mature, harvest if mature
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
@@ -25,8 +28,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useMapStore } from '../../store/mapStore';
 import { useCreatureStore, Creature } from '../../store/creatureStore';
+import { usePlantStore } from '../../store/plantStore';
 import { HABITAT_MAP } from '../../constants/habitats';
 import { SPECIES_MAP } from '../../constants/creatures';
+import { PLANT_MAP, MANUAL_WATER_AMOUNT } from '../../constants/plants';
 import { isCreatureCompatibleWithHabitat } from '../../engine/CreatureAI';
 import {
   TILE_SIZE,
@@ -39,6 +44,7 @@ import { getSkyProgress } from '../../engine/TimeEngine';
 import { useDayNight } from '../../hooks/useDayNight';
 import TerrainTile from './TerrainTile';
 import HabitatBuilding from './HabitatBuilding';
+import PlantSprite from './PlantSprite';
 import CreatureSprite from './CreatureSprite';
 import MiniMap from './MiniMap';
 
@@ -83,6 +89,8 @@ export default function MapCanvas() {
   const placeHabitat     = useMapStore((s) => s.placeHabitat);
   const selectHabitat    = useMapStore((s) => s.selectHabitat);
   const creatures        = useCreatureStore((s) => s.creatures);
+  const plants           = usePlantStore((s) => s.plants);
+  const selectedPlantType = usePlantStore((s) => s.selectedPlantType);
 
   const period = useDayNight();
 
@@ -125,17 +133,28 @@ export default function MapCanvas() {
   // Mode flags kept as SharedValues so gesture worklets can read them
   const isPaintMode    = useSharedValue(false);
   const isHabitatMode  = useSharedValue(false);
+  const isPlantMode    = useSharedValue(false);
   const isDraggingMode = useSharedValue(false);
 
   useEffect(() => {
     isPaintMode.value   = selectedTool !== null;
     isHabitatMode.value = false;
+    if (selectedTool !== null) isPlantMode.value = false;
   }, [selectedTool]);
 
   useEffect(() => {
     isHabitatMode.value = selectedHabitat !== null;
     isPaintMode.value   = false;
+    if (selectedHabitat !== null) isPlantMode.value = false;
   }, [selectedHabitat]);
+
+  useEffect(() => {
+    isPlantMode.value = selectedPlantType !== null;
+    if (selectedPlantType !== null) {
+      isPaintMode.value   = false;
+      isHabitatMode.value = false;
+    }
+  }, [selectedPlantType]);
 
   const lastPaintedTile = useRef<{ x: number; y: number } | null>(null);
 
@@ -225,7 +244,35 @@ export default function MapCanvas() {
     [selectedHabitat, placeHabitat, selectHabitat, translateX, scale],
   );
 
-  // ── Creature tap handler ──────────────────────────────────────────────────
+  // ── Plant placement handler ───────────────────────────────────────────────
+  const handlePlantPlace = useCallback(
+    (sx: number, sy: number) => {
+      const { selectedPlantType: typeId } = usePlantStore.getState();
+      if (!typeId) return;
+      const def = PLANT_MAP.get(typeId);
+      if (!def) return;
+
+      const worldX = (sx - translateX.value) / scale.value;
+      const worldY = (sy - translateY.value) / scale.value;
+      const tileX  = Math.floor(worldX / TILE_SIZE);
+      const tileY  = Math.floor(worldY / TILE_SIZE);
+
+      if (tileX < 0 || tileX >= GRID_COLS || tileY < 0 || tileY >= GRID_ROWS) return;
+
+      // Terrain compatibility check
+      if (def.requiredTerrain !== 'any') {
+        const { terrainGrid: grid } = useMapStore.getState();
+        const tileTerrain = grid[tileY]?.[tileX];
+        if (tileTerrain !== def.requiredTerrain) return;
+      }
+
+      usePlantStore.getState().placePlant(tileX, tileY, typeId);
+      // Do NOT auto-deselect — allow placing multiple plants in a row
+    },
+    [translateX, scale],
+  );
+
+  // ── Creature tap + plant water/harvest handler ───────────────────────────
   const handleTap = useCallback(
     (sx: number, sy: number) => {
       const worldX = (sx - translateX.value) / scale.value;
@@ -242,6 +289,24 @@ export default function MapCanvas() {
             wakeCreature(c.id);
           } else if (c.state === 'active') {
             affectCreature(c.id);
+          }
+          return;
+        }
+      }
+
+      // Check plants — water or harvest
+      const { plants: ps, waterPlant, harvestPlant } = usePlantStore.getState();
+      const PLANT_HIT_SQ = (TILE_SIZE * 0.75) ** 2;
+      for (const plant of ps) {
+        const plantCX = (plant.tileX + 0.5) * TILE_SIZE;
+        const plantCY = (plant.tileY + 0.5) * TILE_SIZE;
+        const dx = plantCX - worldX;
+        const dy = plantCY - worldY;
+        if (dx * dx + dy * dy < PLANT_HIT_SQ) {
+          if (plant.state === 'mature') {
+            harvestPlant(plant.id);
+          } else {
+            waterPlant(plant.id, MANUAL_WATER_AMOUNT);
           }
           return;
         }
@@ -346,6 +411,8 @@ export default function MapCanvas() {
       'worklet';
       if (isHabitatMode.value) {
         runOnJS(handleHabitatPlace)(e.x, e.y);
+      } else if (isPlantMode.value) {
+        runOnJS(handlePlantPlace)(e.x, e.y);
       } else if (!isPaintMode.value) {
         runOnJS(handleTap)(e.x, e.y);
       }
@@ -463,7 +530,19 @@ export default function MapCanvas() {
                 )),
               )}
 
-              {/* ── Habitat layer (above terrain, below creatures) ── */}
+              {/* ── Plant layer (above terrain, below habitats) ── */}
+              {plants.map((plant) => (
+                <PlantSprite
+                  key={plant.id}
+                  tileX={plant.tileX}
+                  tileY={plant.tileY}
+                  plantTypeId={plant.plantTypeId}
+                  state={plant.state}
+                  waterLevel={plant.waterLevel}
+                />
+              ))}
+
+              {/* ── Habitat layer (above plants, below creatures) ── */}
               {habitats.map((h) => {
                 const def = HABITAT_MAP.get(h.habitatTypeId);
                 return (
