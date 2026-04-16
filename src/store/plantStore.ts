@@ -29,11 +29,16 @@ export interface PlantStoreActions {
   /** Remove a plant instance by id */
   removePlant: (id: string) => void;
   /**
-   * Add `amount` water to a plant.
+   * Add `amount` water to a plant (single-step, for live ticks).
    * Automatically advances the growth state when waterLevel ≥ waterPerStage.
    * Mature plants cannot receive more water.
    */
   waterPlant: (id: string, amount: number) => void;
+  /**
+   * Add a large bulk amount of water in one Zustand update (for offline catch-up).
+   * Correctly advances through multiple growth stages if thresholds are crossed.
+   */
+  applyBulkWater: (id: string, totalAmount: number) => void;
   /**
    * Harvest a mature plant: collect the resource and reset it to seed state.
    * Returns the { resourceId, resourceAmount } harvested, or null if not ready.
@@ -109,6 +114,41 @@ export const usePlantStore = create<PlantStoreState & PlantStoreActions>((set, g
       return {
         plants: s.plants.map((p) =>
           p.id === id ? { ...p, waterLevel: 0, state: nextState } : p,
+        ),
+      };
+    });
+  },
+
+  applyBulkWater: (id, totalAmount) => {
+    set((s) => {
+      const plant = s.plants.find((p) => p.id === id);
+      if (!plant || plant.state === 'mature') return s;
+      const def = PLANT_MAP.get(plant.plantTypeId);
+      if (!def) return s;
+
+      let state: GrowthState = plant.state;
+      let waterLevel = plant.waterLevel;
+      let remaining = totalAmount;
+
+      // Walk through stage advances until we run out of water or hit mature
+      while (remaining > 0 && state !== 'mature') {
+        const needed = def.waterPerStage - waterLevel;
+        if (remaining < needed) {
+          waterLevel += remaining;
+          remaining = 0;
+        } else {
+          remaining -= needed;
+          waterLevel = 0;
+          const nextIdx = GROWTH_ORDER.indexOf(state) + 1;
+          state = nextIdx < GROWTH_ORDER.length
+            ? GROWTH_ORDER[nextIdx]
+            : 'mature';
+        }
+      }
+
+      return {
+        plants: s.plants.map((p) =>
+          p.id === id ? { ...p, state, waterLevel } : p,
         ),
       };
     });

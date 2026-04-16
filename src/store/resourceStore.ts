@@ -4,11 +4,23 @@ import { create } from 'zustand';
 // Types
 // ---------------------------------------------------------------------------
 
+export interface OfflineSummary {
+  /** How long the player was actually away (capped at 8 h), in seconds */
+  elapsedSeconds: number;
+  /** Net resource gains from the offline period (only positive deltas) */
+  resourceDeltas: Record<string, number>;
+}
+
 export interface ResourceState {
   /** All non-gold resources keyed by resourceId */
   resources: Record<string, number>;
   /** Gold is the primary in-game currency */
   gold: number;
+  /**
+   * Set by useGameLoop when offline progress was applied.
+   * OfflineSummaryModal reads this and clears it on dismiss.
+   */
+  pendingOfflineSummary: OfflineSummary | null;
 }
 
 export interface ResourceActions {
@@ -20,6 +32,7 @@ export interface ResourceActions {
   spendGold: (amount: number) => boolean;
   /** Bulk-set used for offline restore or save/load */
   setAll: (resources: Record<string, number>, gold: number) => void;
+  setPendingOfflineSummary: (s: OfflineSummary | null) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -32,6 +45,7 @@ export const useResourceStore = create<ResourceState & ResourceActions>(
   (set, get) => ({
     resources: {},
     gold: STARTER_GOLD,
+    pendingOfflineSummary: null,
 
     addResource: (id, amount) =>
       set((s) => ({
@@ -55,5 +69,7 @@ export const useResourceStore = create<ResourceState & ResourceActions>(
     },
 
     setAll: (resources, gold) => set({ resources, gold }),
+
+    setPendingOfflineSummary: (s) => set({ pendingOfflineSummary: s }),
   }),
 );

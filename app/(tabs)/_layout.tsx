@@ -1,8 +1,9 @@
 import { Tabs } from 'expo-router';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '../../src/constants/theme';
 import { useGameLoop } from '../../src/hooks/useGameLoop';
 import { useCreatureAI } from '../../src/hooks/useCreatureAI';
+import OfflineSummaryModal from '../../src/components/ui/OfflineSummaryModal';
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return (
@@ -18,41 +19,49 @@ export default function TabLayout() {
   useCreatureAI();
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: theme.colors.tabActive,
-        tabBarInactiveTintColor: theme.colors.tabInactive,
-        tabBarLabelStyle: styles.tabLabel,
-      }}
-    >
-      <Tabs.Screen
-        name="map"
-        options={{
-          title: 'Terrain',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="🗺️" focused={focused} />,
+    <View style={styles.root}>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: styles.tabBar,
+          tabBarActiveTintColor: theme.colors.tabActive,
+          tabBarInactiveTintColor: theme.colors.tabInactive,
+          tabBarLabelStyle: styles.tabLabel,
         }}
-      />
-      <Tabs.Screen
-        name="creatures"
-        options={{
-          title: 'Creatures',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="🦎" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="⚙️" focused={focused} />,
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="map"
+          options={{
+            title: 'Terrain',
+            tabBarIcon: ({ focused }) => <TabIcon emoji="🗺️" focused={focused} />,
+          }}
+        />
+        <Tabs.Screen
+          name="creatures"
+          options={{
+            title: 'Creatures',
+            tabBarIcon: ({ focused }) => <TabIcon emoji="🦎" focused={focused} />,
+          }}
+        />
+        <Tabs.Screen
+          name="settings"
+          options={{
+            title: 'Settings',
+            tabBarIcon: ({ focused }) => <TabIcon emoji="⚙️" focused={focused} />,
+          }}
+        />
+      </Tabs>
+
+      {/* Offline earnings modal — rendered above all tabs */}
+      <OfflineSummaryModal />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   tabBar: {
     backgroundColor: theme.colors.tabBar,
     borderTopColor: theme.colors.border,
