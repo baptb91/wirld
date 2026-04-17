@@ -18,7 +18,7 @@
     "react": "19.2.5",
     "react-dom": "19.2.5",
     "react-native": "0.76.7",
-    "@shopify/react-native-skia": "2.2.12",
+    "@shopify/react-native-skia": "1.12.4",
     "react-native-reanimated": "~3.16.0",
     "react-native-gesture-handler": "~2.20.0",
     "zustand": "^4.5.5",
@@ -44,6 +44,7 @@
   },
   "overrides": {
     "react": "19.2.5",
-    "react-dom": "19.2.5"
+    "react-dom": "19.2.5",
+    "@shopify/react-native-skia": "1.12.4"
   }
 }
