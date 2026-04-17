@@ -3,7 +3,6 @@
     "name": "WILDS",
     "slug": "wilds",
     "version": "1.0.0",
-    "platforms": ["ios", "android"],
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
