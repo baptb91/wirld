@@ -20,7 +20,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
-import { Canvas } from '@shopify/react-native-skia';
+import { Canvas, Rect } from '@shopify/react-native-skia';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
   interpolateColor,
@@ -92,6 +92,8 @@ export default function MapCanvas() {
   const selectedTool      = useMapStore((s) => s.selectedTool);
   const selectedHabitat   = useMapStore((s) => s.selectedHabitat);
   const selectedBuilding  = useMapStore((s) => s.selectedBuilding);
+  const unlockedCols      = useMapStore((s) => s.unlockedCols);
+  const unlockedRows      = useMapStore((s) => s.unlockedRows);
   const paintTile         = useMapStore((s) => s.paintTile);
   const habitats          = useMapStore((s) => s.habitats);
   const buildings         = useMapStore((s) => s.buildings);
@@ -645,6 +647,26 @@ export default function MapCanvas() {
               {creatures.map((creature) => (
                 <CreatureSprite key={creature.id} creature={creature} />
               ))}
+
+              {/* ── Fog of war — locked (unpurchased) map area ── */}
+              {unlockedCols < GRID_COLS && (
+                <Rect
+                  x={unlockedCols * TILE_SIZE}
+                  y={0}
+                  width={(GRID_COLS - unlockedCols) * TILE_SIZE}
+                  height={MAP_HEIGHT}
+                  color="rgba(0,0,0,0.55)"
+                />
+              )}
+              {unlockedRows < GRID_ROWS && (
+                <Rect
+                  x={0}
+                  y={unlockedRows * TILE_SIZE}
+                  width={unlockedCols * TILE_SIZE}
+                  height={(GRID_ROWS - unlockedRows) * TILE_SIZE}
+                  color="rgba(0,0,0,0.55)"
+                />
+              )}
             </Canvas>
           </Animated.View>
         </View>

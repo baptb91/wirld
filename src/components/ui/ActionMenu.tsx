@@ -19,14 +19,20 @@ import { TERRAIN_TYPES, TERRAIN_CONFIG, TerrainType } from '../../constants/terr
 import { HABITAT_TYPES } from '../../constants/habitats';
 import { PLANT_TYPES } from '../../constants/plants';
 import { BUILDING_TYPES } from '../../constants/buildings';
-import { useMapStore } from '../../store/mapStore';
+import { useMapStore, MAP_EXPANSION_COST } from '../../store/mapStore';
 import { usePlantStore } from '../../store/plantStore';
+import { useResourceStore } from '../../store/resourceStore';
+import { GRID_COLS, GRID_ROWS } from '../../constants/terrain';
 
 type MenuTab = 'terrain' | 'habitats' | 'plants' | 'buildings';
 
 export default function ActionMenu() {
-  const { selectedTool, selectTool, selectedHabitat, selectHabitat, selectedBuilding, selectBuilding } = useMapStore();
+  const { selectedTool, selectTool, selectedHabitat, selectHabitat, selectedBuilding, selectBuilding, unlockedCols, unlockedRows, expandMap } = useMapStore();
   const { selectedPlantType, selectPlantType } = usePlantStore();
+  const gold = useResourceStore((s) => s.gold);
+
+  const mapFullyUnlocked = unlockedCols >= GRID_COLS && unlockedRows >= GRID_ROWS;
+  const canAffordExpansion = gold >= MAP_EXPANSION_COST;
   const [tab, setTab] = useState<MenuTab>('terrain');
 
   const handleTabPress = (next: MenuTab) => {
@@ -269,6 +275,28 @@ export default function ActionMenu() {
                 </Pressable>
               );
             })}
+
+            {/* Expand Map — one-time purchase */}
+            <Pressable
+              onPress={() => { if (!mapFullyUnlocked && canAffordExpansion) expandMap(); }}
+              style={({ pressed }) => [
+                styles.toolBtn,
+                styles.expandBtn,
+                mapFullyUnlocked && styles.expandBtnDone,
+                !mapFullyUnlocked && !canAffordExpansion && styles.expandBtnLocked,
+                pressed && !mapFullyUnlocked && { opacity: 0.75 },
+              ]}
+            >
+              <Text style={styles.toolEmoji}>{mapFullyUnlocked ? '🗺️' : '🔒'}</Text>
+              <Text style={[styles.toolLabel, mapFullyUnlocked && styles.toolLabelWhite]} numberOfLines={1}>
+                {mapFullyUnlocked ? 'Expanded' : 'Expand'}
+              </Text>
+              {!mapFullyUnlocked && (
+                <Text style={[styles.toolCost, !canAffordExpansion && styles.toolCostInsufficient]}>
+                  {MAP_EXPANSION_COST}G
+                </Text>
+              )}
+            </Pressable>
           </ScrollView>
         )}
 
@@ -391,6 +419,19 @@ const styles = StyleSheet.create({
   },
   buildingBtnActive: {
     backgroundColor: '#8B5E3C',
+  },
+  expandBtn: {
+    borderColor: '#4A90D9',
+    width: 72,
+  },
+  expandBtnDone: {
+    backgroundColor: '#4A90D9',
+  },
+  expandBtnLocked: {
+    opacity: 0.5,
+  },
+  toolCostInsufficient: {
+    color: '#FF6B6B',
   },
   // ── Mode pill ──
   modePill: {

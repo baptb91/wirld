@@ -1,7 +1,15 @@
 import { create } from 'zustand';
-import { TerrainType, GRID_COLS, GRID_ROWS } from '../constants/terrain';
+import { TerrainType, GRID_COLS, GRID_ROWS, TERRAIN_CONFIG } from '../constants/terrain';
 import { HABITAT_MAP } from '../constants/habitats';
 import { BUILDING_MAP } from '../constants/buildings';
+import { useResourceStore } from './resourceStore';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+export const MAP_EXPANSION_COST = 2000;
+const INITIAL_UNLOCKED = 16; // 16×16 tiles unlocked at start; expand to 20×20
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,14 +33,14 @@ export interface HabitatPlacement {
 export interface MapState {
   /** 2-D grid of terrain types — row-major: terrainGrid[y][x] */
   terrainGrid: TerrainType[][];
-  /** Currently selected terrain painting tool (null = navigate mode) */
   selectedTool: TerrainType | null;
-  /** Currently selected habitat type to place (null = not placing) */
   selectedHabitat: string | null;
-  /** Currently selected building type to place (null = not placing) */
   selectedBuilding: string | null;
   buildings: BuildingPlacement[];
   habitats: HabitatPlacement[];
+  /** Purchasable map area. Starts at INITIAL_UNLOCKED; expands to GRID_COLS/ROWS. */
+  unlockedCols: number;
+  unlockedRows: number;
 }
 
 export interface MapActions {
@@ -44,10 +52,10 @@ export interface MapActions {
   placeBuilding: (placement: BuildingPlacement) => void;
   placeHabitat: (placement: HabitatPlacement) => void;
   removeHabitat: (id: string) => void;
-  /** Add a creature to a habitat's roster (respects capacity). */
   assignCreatureToHabitat: (habitatId: string, creatureId: string) => void;
-  /** Remove a creature from a habitat's roster. */
   unassignCreatureFromHabitat: (habitatId: string, creatureId: string) => void;
+  /** Spend MAP_EXPANSION_COST gold to unlock the full grid. Returns false if can't afford. */
+  expandMap: () => boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,7 +68,6 @@ function createInitialGrid(): TerrainType[][] {
   );
 }
 
-/** Returns true when two AABB rectangles overlap. */
 function rectsOverlap(
   ax: number, ay: number, aw: number,
   bx: number, by: number, bw: number,
@@ -72,19 +79,25 @@ function rectsOverlap(
 // Store
 // ---------------------------------------------------------------------------
 
-export const useMapStore = create<MapState & MapActions>((set) => ({
+export const useMapStore = create<MapState & MapActions>((set, get) => ({
   terrainGrid: createInitialGrid(),
   selectedTool: null,
   selectedHabitat: null,
   selectedBuilding: null,
   buildings: [],
   habitats: [],
+  unlockedCols: INITIAL_UNLOCKED,
+  unlockedRows: INITIAL_UNLOCKED,
 
+  // ── Terrain painting — costs goldPerTile; blocked outside unlocked area ──
   paintTile: (x, y, type) => {
-    set((state) => {
-      if (x < 0 || x >= GRID_COLS || y < 0 || y >= GRID_ROWS) return state;
-      if (state.terrainGrid[y][x] === type) return state;
-      const newGrid = state.terrainGrid.map((row) => [...row]);
+    const state = get();
+    if (x < 0 || x >= GRID_COLS || y < 0 || y >= GRID_ROWS) return;
+    if (x >= state.unlockedCols || y >= state.unlockedRows) return;
+    if (state.terrainGrid[y][x] === type) return; // no change → no charge
+    if (!useResourceStore.getState().spendGold(TERRAIN_CONFIG[type].costPerTile)) return;
+    set((s) => {
+      const newGrid = s.terrainGrid.map((row) => [...row]);
       newGrid[y][x] = type;
       return { terrainGrid: newGrid };
     });
@@ -115,62 +128,52 @@ export const useMapStore = create<MapState & MapActions>((set) => ({
   selectBuilding: (id) =>
     set({ selectedBuilding: id, selectedTool: null, selectedHabitat: null }),
 
-  placeBuilding: (placement) =>
-    set((state) => {
-      const def = BUILDING_MAP.get(placement.buildingTypeId);
-      if (!def) return state;
-      const sz = def.tileSize;
+  // ── Building placement — costs baseCost gold ─────────────────────────────
+  placeBuilding: (placement) => {
+    const state = get();
+    const def = BUILDING_MAP.get(placement.buildingTypeId);
+    if (!def) return;
+    const sz = def.tileSize;
 
-      // Bounds check
-      if (
-        placement.tileX < 0 || placement.tileX + sz > GRID_COLS ||
-        placement.tileY < 0 || placement.tileY + sz > GRID_ROWS
-      ) return state;
+    if (
+      placement.tileX < 0 || placement.tileX + sz > state.unlockedCols ||
+      placement.tileY < 0 || placement.tileY + sz > state.unlockedRows
+    ) return;
 
-      // Overlap vs existing buildings
-      const buildingOverlap = state.buildings.some((b) => {
-        const bDef = BUILDING_MAP.get(b.buildingTypeId);
-        if (!bDef) return false;
-        return rectsOverlap(placement.tileX, placement.tileY, sz, b.tileX, b.tileY, bDef.tileSize);
-      });
-      if (buildingOverlap) return state;
+    if (state.buildings.some((b) => {
+      const bDef = BUILDING_MAP.get(b.buildingTypeId);
+      return bDef ? rectsOverlap(placement.tileX, placement.tileY, sz, b.tileX, b.tileY, bDef.tileSize) : false;
+    })) return;
 
-      // Overlap vs existing habitats
-      const habitatOverlap = state.habitats.some((h) => {
-        const hDef = HABITAT_MAP.get(h.habitatTypeId);
-        if (!hDef) return false;
-        return rectsOverlap(placement.tileX, placement.tileY, sz, h.tileX, h.tileY, hDef.tileSize);
-      });
-      if (habitatOverlap) return state;
+    if (state.habitats.some((h) => {
+      const hDef = HABITAT_MAP.get(h.habitatTypeId);
+      return hDef ? rectsOverlap(placement.tileX, placement.tileY, sz, h.tileX, h.tileY, hDef.tileSize) : false;
+    })) return;
 
-      return { buildings: [...state.buildings, placement] };
-    }),
+    if (!useResourceStore.getState().spendGold(def.baseCost)) return;
+    set((s) => ({ buildings: [...s.buildings, placement] }));
+  },
 
-  placeHabitat: (placement) =>
-    set((state) => {
-      const def = HABITAT_MAP.get(placement.habitatTypeId);
-      if (!def) return state;
-      const sz = def.tileSize;
+  // ── Habitat placement — costs baseCost gold ──────────────────────────────
+  placeHabitat: (placement) => {
+    const state = get();
+    const def = HABITAT_MAP.get(placement.habitatTypeId);
+    if (!def) return;
+    const sz = def.tileSize;
 
-      // Bounds check
-      if (
-        placement.tileX < 0 || placement.tileX + sz > GRID_COLS ||
-        placement.tileY < 0 || placement.tileY + sz > GRID_ROWS
-      ) return state;
+    if (
+      placement.tileX < 0 || placement.tileX + sz > state.unlockedCols ||
+      placement.tileY < 0 || placement.tileY + sz > state.unlockedRows
+    ) return;
 
-      // Overlap check against existing habitats
-      const hasOverlap = state.habitats.some((h) => {
-        const hDef = HABITAT_MAP.get(h.habitatTypeId);
-        if (!hDef) return false;
-        return rectsOverlap(
-          placement.tileX, placement.tileY, sz,
-          h.tileX, h.tileY, hDef.tileSize,
-        );
-      });
-      if (hasOverlap) return state;
+    if (state.habitats.some((h) => {
+      const hDef = HABITAT_MAP.get(h.habitatTypeId);
+      return hDef ? rectsOverlap(placement.tileX, placement.tileY, sz, h.tileX, h.tileY, hDef.tileSize) : false;
+    })) return;
 
-      return { habitats: [...state.habitats, placement] };
-    }),
+    if (!useResourceStore.getState().spendGold(def.baseCost)) return;
+    set((s) => ({ habitats: [...s.habitats, placement] }));
+  },
 
   removeHabitat: (id) =>
     set((state) => ({
@@ -202,5 +205,13 @@ export const useMapStore = create<MapState & MapActions>((set) => ({
           : h,
       ),
     })),
-}));
 
+  // ── Map expansion — one-time purchase to unlock full grid ────────────────
+  expandMap: () => {
+    const state = get();
+    if (state.unlockedCols >= GRID_COLS && state.unlockedRows >= GRID_ROWS) return false;
+    if (!useResourceStore.getState().spendGold(MAP_EXPANSION_COST)) return false;
+    set({ unlockedCols: GRID_COLS, unlockedRows: GRID_ROWS });
+    return true;
+  },
+}));
