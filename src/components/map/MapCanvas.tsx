@@ -59,7 +59,7 @@ import MiniMap from './MiniMap';
 // Constants
 // ---------------------------------------------------------------------------
 
-const MIN_SCALE = 0.4;
+const MIN_SCALE = 0.5;
 const MAX_SCALE = 3.0;
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
