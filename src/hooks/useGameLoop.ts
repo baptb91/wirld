@@ -86,6 +86,8 @@ function runProductionTick(now: number): void {
       creature.happiness >= 80 ? 1.5 :
       creature.happiness >= 50 ? 1.0 : 0.5;
 
+    if (creature.isShiny) mult *= 2;
+
     if (creature.habitatId) {
       const habitat    = habitats.find((h) => h.id === creature.habitatId);
       const habitatDef = habitat ? HABITAT_MAP.get(habitat.habitatTypeId) : undefined;

@@ -53,6 +53,7 @@ function OwnedCreatureCard({
   if (!def) return null;
   const rarityColor = RARITY_COLOR[def.rarity] ?? '#888';
   const emoji = SPECIES_EMOJI[creature.speciesId] ?? '❓';
+  const sellPrice = def.sellPrice * (creature.isShiny ? 5 : 1);
 
   return (
     <View style={[styles.ownedCard, { borderColor: rarityColor }]}>
@@ -70,7 +71,7 @@ function OwnedCreatureCard({
         style={({ pressed }) => [styles.sellBtn, pressed && { opacity: 0.75 }]}
         onPress={() => onSell(creature.id)}
       >
-        <Text style={styles.sellBtnText}>Sell  💰{formatGold(def.sellPrice)}</Text>
+        <Text style={styles.sellBtnText}>Sell  💰{formatGold(sellPrice)}</Text>
       </Pressable>
     </View>
   );
@@ -124,10 +125,11 @@ export default function CreaturesScreen() {
     if (!creature) return;
     const def = SPECIES_MAP.get(creature.speciesId);
     if (!def) return;
+    const sellPrice = def.sellPrice * (creature.isShiny ? 5 : 1);
 
     Alert.alert(
       `Sell ${creature.name}?`,
-      `You'll receive 💰${formatGold(def.sellPrice)} gold.`,
+      `You'll receive 💰${formatGold(sellPrice)} gold.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -138,7 +140,7 @@ export default function CreaturesScreen() {
               unassignFromHabitat(creature.habitatId, creature.id);
             }
             removeCreature(creature.id);
-            addGold(def.sellPrice);
+            addGold(sellPrice);
           },
         },
       ],

@@ -54,6 +54,7 @@ import PlantSprite from './PlantSprite';
 import CreatureSprite from './CreatureSprite';
 import WarehouseBuilding from './WarehouseBuilding';
 import WarehousePanel from '../ui/WarehousePanel';
+import CaptureOverlay from '../ui/CaptureOverlay';
 import MiniMap from './MiniMap';
 
 // ---------------------------------------------------------------------------
@@ -107,6 +108,7 @@ export default function MapCanvas() {
   const selectedPlantType = usePlantStore((s) => s.selectedPlantType);
 
   const [warehousePanelOpen, setWarehousePanelOpen] = useState(false);
+  const [captureTarget, setCaptureTarget] = useState<Creature | null>(null);
 
   const period = useDayNight();
 
@@ -342,6 +344,11 @@ export default function MapCanvas() {
         const dx = c.targetPosition.x - worldX;
         const dy = c.targetPosition.y - worldY;
         if (dx * dx + dy * dy < HIT_SQ) {
+          // Wild (uncaptured) creature — open capture mini-game
+          if (c.wildExpiresAt !== null && c.habitatId === null) {
+            setCaptureTarget(c);
+            return;
+          }
           if (c.state === 'sleeping' || c.state === 'stumbling') {
             wakeCreature(c.id);
           } else if (c.state === 'active') {
@@ -704,6 +711,14 @@ export default function MapCanvas() {
         visible={warehousePanelOpen}
         onClose={() => setWarehousePanelOpen(false)}
       />
+
+      {/* Capture mini-game overlay */}
+      {captureTarget && (
+        <CaptureOverlay
+          creature={captureTarget}
+          onClose={() => setCaptureTarget(null)}
+        />
+      )}
     </View>
   );
 }

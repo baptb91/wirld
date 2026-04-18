@@ -22,6 +22,10 @@ import {
   SPAWN_INTERVAL_MS,
   DEPART_CHECK_MS,
 } from '../engine/EcosystemEngine';
+import {
+  notifyWildCreature,
+  notifyShinyCreature,
+} from '../services/NotificationService';
 
 export function useEcosystemEngine(): void {
   useEffect(() => {
@@ -39,7 +43,13 @@ export function useEcosystemEngine(): void {
       const species = pickSpawnCandidate(counts);
       if (!species) return;
 
-      addCreature(createWildCreature(species, unlockedCols, unlockedRows));
+      const newCreature = createWildCreature(species, unlockedCols, unlockedRows);
+      addCreature(newCreature);
+      if (newCreature.isShiny) {
+        notifyShinyCreature(species.name);
+      } else {
+        notifyWildCreature(species.name);
+      }
     };
 
     // ── Departure check ────────────────────────────────────────────────────
