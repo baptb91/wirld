@@ -33,10 +33,16 @@ export interface Creature {
   sleepInterrupts: number;
   /** Timestamp: when affection was last shown (heart animation trigger). */
   lastAffectedAt: number;
+  /**
+   * null  = permanent (starter / assigned to habitat).
+   * number = UTC ms when a wild creature leaves if still unassigned.
+   */
+  wildExpiresAt: number | null;
 }
 
 export interface CreatureState2 {
   creatures: Creature[];
+  maxCreatures: number;
 }
 
 export interface CreatureActions {
@@ -46,6 +52,8 @@ export interface CreatureActions {
   wakeCreature: (id: string) => void;
   affectCreature: (id: string) => void;
   setCreatures: (cs: Creature[]) => void;
+  increaseMaxCreatures: (amount: number) => void;
+  shiftPositions: (dx: number, dy: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +88,7 @@ function makeStarter(): Creature[] {
       lastWokenAt: 0,
       sleepInterrupts: 0,
       lastAffectedAt: 0,
+      wildExpiresAt: null,
     },
     {
       id: 'starter-broutard-1',
@@ -99,6 +108,7 @@ function makeStarter(): Creature[] {
       lastWokenAt: 0,
       sleepInterrupts: 0,
       lastAffectedAt: 0,
+      wildExpiresAt: null,
     },
     {
       id: 'starter-flottin-1',
@@ -118,6 +128,7 @@ function makeStarter(): Creature[] {
       lastWokenAt: 0,
       sleepInterrupts: 0,
       lastAffectedAt: 0,
+      wildExpiresAt: null,
     },
   ];
 }
@@ -129,6 +140,7 @@ function makeStarter(): Creature[] {
 export const useCreatureStore = create<CreatureState2 & CreatureActions>(
   (set, get) => ({
     creatures: makeStarter(),
+    maxCreatures: 10,
 
     addCreature: (c) =>
       set((s) => ({ creatures: [...s.creatures, c] })),
@@ -181,5 +193,17 @@ export const useCreatureStore = create<CreatureState2 & CreatureActions>(
     },
 
     setCreatures: (cs) => set({ creatures: cs }),
+
+    increaseMaxCreatures: (amount) =>
+      set((s) => ({ maxCreatures: s.maxCreatures + amount })),
+
+    shiftPositions: (dx, dy) =>
+      set((s) => ({
+        creatures: s.creatures.map((c) => ({
+          ...c,
+          position:       { x: c.position.x + dx,       y: c.position.y + dy },
+          targetPosition: { x: c.targetPosition.x + dx, y: c.targetPosition.y + dy },
+        })),
+      })),
   }),
 );

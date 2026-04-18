@@ -47,6 +47,7 @@ import {
 } from '../../constants/terrain';
 import { getSkyProgress } from '../../engine/TimeEngine';
 import { useDayNight } from '../../hooks/useDayNight';
+import { useEcosystemEngine } from '../../hooks/useEcosystemEngine';
 import TerrainTile from './TerrainTile';
 import HabitatBuilding from './HabitatBuilding';
 import PlantSprite from './PlantSprite';
@@ -108,6 +109,9 @@ export default function MapCanvas() {
   const [warehousePanelOpen, setWarehousePanelOpen] = useState(false);
 
   const period = useDayNight();
+
+  // Wild creature spawn + departure engine
+  useEcosystemEngine();
 
   // ── Sky gradient ─────────────────────────────────────────────────────────
   const skyProgress = useSharedValue(getSkyProgress());
@@ -456,7 +460,10 @@ export default function MapCanvas() {
           if (!alreadyIn) {
             assignCreatureToHabitat(h.id, creature.id);
           }
-          useCreatureStore.getState().updateCreature(creature.id, { habitatId: h.id });
+          useCreatureStore.getState().updateCreature(creature.id, {
+            habitatId: h.id,
+            wildExpiresAt: null, // creature is now captured — won't depart
+          });
           return;
         }
       }
