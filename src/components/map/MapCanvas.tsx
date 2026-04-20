@@ -33,6 +33,7 @@ import { useMapStore } from '../../store/mapStore';
 import { useCreatureStore, Creature } from '../../store/creatureStore';
 import { usePlantStore } from '../../store/plantStore';
 import { useResourceStore } from '../../store/resourceStore';
+import { useRavagerStore } from '../../store/ravagerStore';
 import { HABITAT_MAP } from '../../constants/habitats';
 import { BUILDING_MAP } from '../../constants/buildings';
 import { SPECIES_MAP } from '../../constants/creatures';
@@ -48,10 +49,12 @@ import {
 import { getSkyProgress } from '../../engine/TimeEngine';
 import { useDayNight } from '../../hooks/useDayNight';
 import { useEcosystemEngine } from '../../hooks/useEcosystemEngine';
+import { useRavagerEngine } from '../../hooks/useRavagerEngine';
 import TerrainTile from './TerrainTile';
 import HabitatBuilding from './HabitatBuilding';
 import PlantSprite from './PlantSprite';
 import CreatureSprite from './CreatureSprite';
+import RavagerSprite from './RavagerSprite';
 import WarehouseBuilding from './WarehouseBuilding';
 import WarehousePanel from '../ui/WarehousePanel';
 import CaptureOverlay from '../ui/CaptureOverlay';
@@ -104,6 +107,7 @@ export default function MapCanvas() {
   const selectHabitat     = useMapStore((s) => s.selectHabitat);
   const selectBuilding    = useMapStore((s) => s.selectBuilding);
   const creatures         = useCreatureStore((s) => s.creatures);
+  const ravagers          = useRavagerStore((s) => s.ravagers);
   const plants            = usePlantStore((s) => s.plants);
   const selectedPlantType = usePlantStore((s) => s.selectedPlantType);
 
@@ -114,6 +118,8 @@ export default function MapCanvas() {
 
   // Wild creature spawn + departure engine
   useEcosystemEngine();
+  // Ravager attack-wave engine
+  useRavagerEngine();
 
   // ── Sky gradient ─────────────────────────────────────────────────────────
   const skyProgress = useSharedValue(getSkyProgress());
@@ -660,6 +666,11 @@ export default function MapCanvas() {
               {/* ── Creature layer ── */}
               {creatures.map((creature) => (
                 <CreatureSprite key={creature.id} creature={creature} />
+              ))}
+
+              {/* ── Ravager layer (above creatures) ── */}
+              {ravagers.map((r) => (
+                <RavagerSprite key={r.id} ravager={r} />
               ))}
 
               {/* ── Fog of war — locked (unpurchased) map area ── */}
