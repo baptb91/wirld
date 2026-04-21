@@ -118,12 +118,14 @@ export async function notifyShinyCreature(speciesName: string): Promise<void> {
   await schedule('✨ Shiny creature appeared!', `A shiny ${speciesName} is on your map!`, true);
 }
 
-export async function notifyRavagerWarning(): Promise<void> {
-  await schedule(
-    '⚠️ Ravager Warning!',
-    'A ravager is heading toward your habitat in 30 minutes!',
-    true,
-  );
+export async function notifyRavagerWarning(
+  leadTimeMin = 30,
+  targetHint?: string,
+): Promise<void> {
+  const body = targetHint
+    ? `Attack targeting ${targetHint} in ${leadTimeMin} minutes! Prepare defenses.`
+    : `A ravager attack is incoming in ${leadTimeMin} minutes!`;
+  await schedule('⚠️ Ravager Warning!', body, true);
 }
 
 export async function notifyBreedingComplete(): Promise<void> {

@@ -29,6 +29,10 @@ interface RavagerState {
   waveDefeats:     number;
   /** Set when a wave ends; cleared when the player dismisses the modal */
   battleReport:    BattleReport | null;
+  /** Ravager IDs already slowed by a bait trap this wave */
+  slowedRavagerIds:    string[];
+  /** Building IDs manually activated by the player this wave (+30% effectiveness) */
+  activatedDefenseIds: string[];
 }
 
 interface RavagerActions {
@@ -40,9 +44,11 @@ interface RavagerActions {
   clearRavagers:      () => void;
   setNextAttackAt:    (ts: number) => void;
   setWaveActiveUntil: (ts: number) => void;
-  setFocusedRavager:  (id: string | null) => void;
-  resetWaveStats:     () => void;
-  setBattleReport:    (r: BattleReport | null) => void;
+  setFocusedRavager:   (id: string | null) => void;
+  resetWaveStats:      () => void;
+  setBattleReport:     (r: BattleReport | null) => void;
+  addSlowedRavager:    (id: string) => void;
+  activateDefense:     (id: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -50,12 +56,14 @@ interface RavagerActions {
 // ---------------------------------------------------------------------------
 
 export const useRavagerStore = create<RavagerState & RavagerActions>((set) => ({
-  ravagers:         [],
-  nextAttackAt:     0,
-  waveActiveUntil:  0,
-  focusedRavagerId: null,
-  waveDefeats:      0,
-  battleReport:     null,
+  ravagers:            [],
+  nextAttackAt:        0,
+  waveActiveUntil:     0,
+  focusedRavagerId:    null,
+  waveDefeats:         0,
+  battleReport:        null,
+  slowedRavagerIds:    [],
+  activatedDefenseIds: [],
 
   setRavagers: (rs) => set({ ravagers: rs }),
 
@@ -91,6 +99,8 @@ export const useRavagerStore = create<RavagerState & RavagerActions>((set) => ({
   setNextAttackAt:    (ts) => set({ nextAttackAt: ts }),
   setWaveActiveUntil: (ts) => set({ waveActiveUntil: ts }),
   setFocusedRavager:  (id) => set({ focusedRavagerId: id }),
-  resetWaveStats:     ()   => set({ waveDefeats: 0 }),
+  resetWaveStats:     ()   => set({ waveDefeats: 0, slowedRavagerIds: [], activatedDefenseIds: [] }),
   setBattleReport:    (r)  => set({ battleReport: r }),
+  addSlowedRavager:   (id) => set((s) => ({ slowedRavagerIds: [...s.slowedRavagerIds, id] })),
+  activateDefense:    (id) => set((s) => ({ activatedDefenseIds: [...s.activatedDefenseIds, id] })),
 }));

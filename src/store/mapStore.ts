@@ -28,6 +28,8 @@ export interface BuildingPlacement {
   buildingTypeId: string;
   tileX: number;
   tileY: number;
+  /** Palisade: remaining block count (initialized on wave spawn) */
+  defenseHp?: number;
 }
 
 export interface HabitatPlacement {
@@ -69,6 +71,8 @@ export interface MapActions {
   selectHabitat: (id: string | null) => void;
   selectBuilding: (id: string | null) => void;
   placeBuilding: (placement: BuildingPlacement) => void;
+  updateBuilding: (id: string, updates: Partial<BuildingPlacement>) => void;
+  removeBuilding: (id: string) => void;
   placeHabitat: (placement: HabitatPlacement) => void;
   removeHabitat: (id: string) => void;
   assignCreatureToHabitat: (habitatId: string, creatureId: string) => void;
@@ -175,6 +179,14 @@ export const useMapStore = create<MapState & MapActions>((set, get) => ({
     if (!useResourceStore.getState().spendGold(def.baseCost)) return;
     set((s) => ({ buildings: [...s.buildings, placement] }));
   },
+
+  updateBuilding: (id, updates) =>
+    set((s) => ({
+      buildings: s.buildings.map((b) => (b.id === id ? { ...b, ...updates } : b)),
+    })),
+
+  removeBuilding: (id) =>
+    set((s) => ({ buildings: s.buildings.filter((b) => b.id !== id) })),
 
   // ── Habitat placement ────────────────────────────────────────────────────
   placeHabitat: (placement) => {

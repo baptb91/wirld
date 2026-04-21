@@ -60,6 +60,7 @@ import WarehousePanel from '../ui/WarehousePanel';
 import CaptureOverlay from '../ui/CaptureOverlay';
 import RavagerAlert from '../ui/RavagerAlert';
 import BattleResultModal from '../ui/BattleResultModal';
+import DefensePanel from '../ui/DefensePanel';
 import MiniMap from './MiniMap';
 import { interpolateRavagerPos } from '../../engine/RavagerEngine';
 
@@ -749,6 +750,9 @@ export default function MapCanvas() {
           onClose={() => setCaptureTarget(null)}
         />
       )}
+
+      {/* Defense activation panel — shown during active waves */}
+      <DefensePanel />
 
       {/* Ravager incoming warning banner */}
       <RavagerAlert />

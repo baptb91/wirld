@@ -29,6 +29,7 @@ import type { Creature } from '../store/creatureStore';
 export const FIRST_ATTACK_DELAY_MS   = 24 * 60 * 60 * 1000; // 24 h
 export const ATTACK_INTERVAL_MS      = 12 * 60 * 60 * 1000; // 12 h
 export const WARNING_BEFORE_MS       = 30 * 60 * 1000;       // 30 min
+export const WARNING_WATCHTOWER_MS   = 60 * 60 * 1000;       // 1 h (with Watchtower)
 export const RAVAGER_AI_TICK_MS      = 2_000;
 export const RAVAGER_SPEED_PX_PER_MS = TILE_SIZE / 1800;     // ~26 px/s
 
@@ -183,6 +184,23 @@ function selectTarget(
 
   // 4. Fallback: walk toward center (no damage)
   return { type: 'center', id: null, px: center };
+}
+
+// ---------------------------------------------------------------------------
+// Watchtower: peek at what the next wave will primarily target
+// ---------------------------------------------------------------------------
+
+export function getWaveTargetHint(
+  plants:    readonly PlantInstance[],
+  buildings: readonly BuildingPlacement[],
+  creatures: readonly Creature[],
+): string {
+  if (plants.length > 0) return 'plants';
+  if (buildings.some((b) => b.buildingTypeId === 'warehouse')) return 'the warehouse';
+  if (creatures.some(
+    (c) => c.wildExpiresAt === null && SPECIES_MAP.get(c.speciesId)?.type === 'herbivore',
+  )) return 'your creatures';
+  return 'the center of your map';
 }
 
 // ---------------------------------------------------------------------------
