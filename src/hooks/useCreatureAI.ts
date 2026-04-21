@@ -152,7 +152,9 @@ export function useCreatureAI(): void {
         c.targetPosition.y,
       );
       const walkMs  = walkDuration(c.targetPosition, newTarget);
-      const pauseMs = randomPauseDuration();
+      // Hungry carnivores (hunger ≥ 80) pace without pausing
+      const isAgitated = SPECIES_MAP.get(c.speciesId)?.type === 'carnivore' && c.hunger >= 80;
+      const pauseMs = isAgitated ? 0 : randomPauseDuration();
 
       updateCreature(c.id, {
         position: c.targetPosition,   // record leg start for sprite interpolation

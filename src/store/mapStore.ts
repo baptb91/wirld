@@ -30,6 +30,8 @@ export interface BuildingPlacement {
   tileY: number;
   /** Palisade: remaining block count (initialized on wave spawn) */
   defenseHp?: number;
+  /** Vivarium: UTC ms of last fish production */
+  lastProducedAt?: number;
 }
 
 export interface HabitatPlacement {

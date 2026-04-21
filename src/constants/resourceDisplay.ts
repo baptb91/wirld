@@ -39,6 +39,8 @@ export const RESOURCE_DISPLAY: Record<string, ResourceDisplayDef> = {
   // ── Bait items ───────────────────────────────────────────────────────────
   meat:          { emoji: '🥩', color: '#9B1C1C', label: 'Meat' },
   lure:          { emoji: '🪝', color: '#1D4ED8', label: 'Lure' },
+  // ── Building produce ─────────────────────────────────────────────────────
+  fish:          { emoji: '🐟', color: '#2563EB', label: 'Fish' },
 };
 
 /** Fallback for unknown resource IDs */

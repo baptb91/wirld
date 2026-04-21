@@ -16,6 +16,8 @@ export interface Creature {
   happiness: number;
   /** 0–100; carnivores only — others always 0 */
   hunger: number;
+  /** UTC ms of last hunger calculation — used to avoid double-counting per tick */
+  lastHungerAt: number;
   isShiny: boolean;
   habitatId: string | null;
   state: CreatureState;
@@ -51,6 +53,8 @@ export interface CreatureActions {
   updateCreature: (id: string, updates: Partial<Creature>) => void;
   wakeCreature: (id: string) => void;
   affectCreature: (id: string) => void;
+  /** Feed a carnivore: reset hunger to 0 */
+  feedCreature: (id: string) => void;
   setCreatures: (cs: Creature[]) => void;
   increaseMaxCreatures: (amount: number) => void;
   shiftPositions: (dx: number, dy: number) => void;
@@ -77,6 +81,7 @@ function makeStarter(): Creature[] {
       level: 1,
       happiness: 70,
       hunger: 0,
+      lastHungerAt: now,
       isShiny: false,
       habitatId: null,
       state: isCreatureActive('diurnal') ? 'active' : 'sleeping',
@@ -97,6 +102,7 @@ function makeStarter(): Creature[] {
       level: 1,
       happiness: 65,
       hunger: 0,
+      lastHungerAt: now,
       isShiny: false,
       habitatId: null,
       state: isCreatureActive('diurnal') ? 'active' : 'sleeping',
@@ -117,6 +123,7 @@ function makeStarter(): Creature[] {
       level: 1,
       happiness: 75,
       hunger: 0,
+      lastHungerAt: now,
       isShiny: false,
       habitatId: null,
       state: isCreatureActive('diurnal') ? 'active' : 'sleeping',
@@ -173,6 +180,15 @@ export const useCreatureStore = create<CreatureState2 & CreatureActions>(
             nextMoveAt: now + 12_000, // stumble for ~12s then re-evaluate
           };
         }),
+      }));
+    },
+
+    feedCreature: (id) => {
+      const now = Date.now();
+      set((s) => ({
+        creatures: s.creatures.map((c) =>
+          c.id === id ? { ...c, hunger: 0, lastHungerAt: now } : c,
+        ),
       }));
     },
 

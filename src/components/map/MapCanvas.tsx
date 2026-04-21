@@ -61,6 +61,8 @@ import CaptureOverlay from '../ui/CaptureOverlay';
 import RavagerAlert from '../ui/RavagerAlert';
 import BattleResultModal from '../ui/BattleResultModal';
 import DefensePanel from '../ui/DefensePanel';
+import CarnivoreHungerPanel from '../ui/CarnivoreHungerPanel';
+import TransformerPanel from '../ui/TransformerPanel';
 import MiniMap from './MiniMap';
 import { interpolateRavagerPos } from '../../engine/RavagerEngine';
 
@@ -116,8 +118,10 @@ export default function MapCanvas() {
   const plants            = usePlantStore((s) => s.plants);
   const selectedPlantType = usePlantStore((s) => s.selectedPlantType);
 
-  const [warehousePanelOpen, setWarehousePanelOpen] = useState(false);
-  const [captureTarget, setCaptureTarget] = useState<Creature | null>(null);
+  const [warehousePanelOpen, setWarehousePanelOpen]     = useState(false);
+  const [transformerPanelOpen, setTransformerPanelOpen] = useState(false);
+  const [captureTarget, setCaptureTarget]               = useState<Creature | null>(null);
+  const [hungerTarget, setHungerTarget]                 = useState<Creature | null>(null);
 
   const period = useDayNight();
 
@@ -375,6 +379,11 @@ export default function MapCanvas() {
             setCaptureTarget(c);
             return;
           }
+          // Hungry carnivore — open feed panel
+          if (SPECIES_MAP.get(c.speciesId)?.type === 'carnivore' && c.hunger > 0) {
+            setHungerTarget(c);
+            return;
+          }
           if (c.state === 'sleeping' || c.state === 'stumbling') {
             wakeCreature(c.id);
           } else if (c.state === 'active') {
@@ -416,6 +425,8 @@ export default function MapCanvas() {
         if (worldX >= bX && worldX <= bX + bW && worldY >= bY && worldY <= bY + bW) {
           if (b.buildingTypeId === 'warehouse') {
             setWarehousePanelOpen(true);
+          } else if (b.buildingTypeId === 'transformer') {
+            setTransformerPanelOpen(true);
           }
           return;
         }
@@ -748,6 +759,21 @@ export default function MapCanvas() {
         <CaptureOverlay
           creature={captureTarget}
           onClose={() => setCaptureTarget(null)}
+        />
+      )}
+
+      {/* Carnivore hunger feed panel */}
+      {hungerTarget && (
+        <CarnivoreHungerPanel
+          creature={hungerTarget}
+          onClose={() => setHungerTarget(null)}
+        />
+      )}
+
+      {/* Transformer building panel */}
+      {transformerPanelOpen && (
+        <TransformerPanel
+          onClose={() => setTransformerPanelOpen(false)}
         />
       )}
 

@@ -1370,9 +1370,38 @@ export interface CreatureSpriteProps {
   creature: Creature;
 }
 
+// ---------------------------------------------------------------------------
+// Hunger indicator — pulsing orange dot shown for carnivores with hunger ≥ 80
+// ---------------------------------------------------------------------------
+
+function HungerIndicator() {
+  const pulse = useSharedValue(1.0);
+  useEffect(() => {
+    pulse.value = withRepeat(
+      withSequence(
+        withTiming(0.4, { duration: 350 }),
+        withTiming(1.0, { duration: 350 }),
+      ),
+      -1,
+      false,
+    );
+    return () => cancelAnimation(pulse);
+  }, []);
+  return (
+    <Group>
+      {/* Pulsing danger dot */}
+      <Circle cx={0} cy={-26} r={5} color="rgba(255,70,0,0.92)" opacity={pulse} />
+      {/* ! exclamation mark */}
+      <Circle cx={0} cy={-28} r={1.4} color="#fff" />
+      <Circle cx={0} cy={-23} r={1.4} color="#fff" />
+    </Group>
+  );
+}
+
 const CreatureSprite = memo(function CreatureSprite({ creature }: CreatureSpriteProps) {
   const isSleeping  = creature.state === 'sleeping';
   const isStumbling = creature.state === 'stumbling';
+  const isAgitated  = SPECIES_MAP.get(creature.speciesId)?.type === 'carnivore' && creature.hunger >= 80;
 
   // ── Pixel-position animation ─────────────────────────────────────────────
   const posX = useSharedValue(creature.position.x);
@@ -1458,6 +1487,9 @@ const CreatureSprite = memo(function CreatureSprite({ creature }: CreatureSprite
 
       {/* ZZZ bubbles (only while sleeping) */}
       {isSleeping && <ZzzBubbles />}
+
+      {/* Hunger indicator (carnivores at ≥ 80 hunger) */}
+      {isAgitated && <HungerIndicator />}
 
       {/* Heart particle (fires on each affection) */}
       <HeartParticle trigger={creature.lastAffectedAt} />

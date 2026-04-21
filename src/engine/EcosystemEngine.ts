@@ -197,6 +197,7 @@ export function createWildCreature(
     level:          1,
     happiness:      60 + Math.floor(Math.random() * 20),
     hunger:         0,
+    lastHungerAt:   now,
     isShiny,
     habitatId:      null,
     state:          'active',
