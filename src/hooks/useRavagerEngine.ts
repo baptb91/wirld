@@ -12,9 +12,9 @@
  *      b. If wave is due: spawnWave()
  *      c. If waveActiveUntil has passed: force endWave()
  *   3. AI tick (every 2 s):
- *      • ravager.state 'moving' + arrivalAt ≤ now  → applyDamage + 'retreating'
+ *      • ravager.state 'moving' + arrivalAt ≤ now → applyDamage + 'retreating'
  *      • ravager.state 'retreating' + retreatAt ≤ now → removeRavager
- *      • all ravagers removed → endWave()
+ *      • all ravagers gone → endWave() + set BattleReport
  *
  * Mount once in MapCanvas (active only while the map tab is open).
  */
@@ -39,17 +39,9 @@ import {
 } from '../engine/RavagerEngine';
 import { notifyRavagerWarning } from '../services/NotificationService';
 
-// ---------------------------------------------------------------------------
-// AsyncStorage keys
-// ---------------------------------------------------------------------------
-
 const FIRST_LAUNCH_KEY = '@wilds/firstLaunchAt';
 const NEXT_RAVAGER_KEY = '@wilds/nextRavagerAt';
-const WAVE_TIMEOUT_MS  = 5 * 60 * 1000; // 5-min hard cap on wave duration
-
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
+const WAVE_TIMEOUT_MS  = 5 * 60 * 1000;
 
 export function useRavagerEngine(): void {
   const waveSpawnedRef  = useRef(false);
@@ -57,10 +49,17 @@ export function useRavagerEngine(): void {
   const isInitialized   = useRef(false);
   const isEndingWave    = useRef(false);
 
-  // ── Damage application ─────────────────────────────────────────────────
+  // Battle stat trackers — reset on each wave spawn
+  const waveTotalRef      = useRef(0);
+  const plantsLostRef     = useRef(0);
+  const creaturesLostRef  = useRef(0);
+  const resourcesStolenRef = useRef<Record<string, number>>({});
+
+  // ── Damage application (tracks stats for battle report) ─────────────────
   function applyDamage(r: Ravager): void {
     if (r.targetType === 'plant' && r.targetId) {
       usePlantStore.getState().removePlant(r.targetId);
+      plantsLostRef.current++;
       return;
     }
 
@@ -68,7 +67,10 @@ export function useRavagerEngine(): void {
       const resources = useResourceStore.getState().resources;
       for (const [id, amount] of Object.entries(resources)) {
         const loss = Math.floor(amount * 0.3);
-        if (loss > 0) useResourceStore.getState().spendResource(id, loss);
+        if (loss > 0) {
+          useResourceStore.getState().spendResource(id, loss);
+          resourcesStolenRef.current[id] = (resourcesStolenRef.current[id] ?? 0) + loss;
+        }
       }
       return;
     }
@@ -76,26 +78,33 @@ export function useRavagerEngine(): void {
     if (r.targetType === 'herbivore' && r.targetId) {
       const creature = useCreatureStore.getState().creatures.find((c) => c.id === r.targetId);
       if (!creature) return;
-      // Respect habitat immunity (RarePalace) and defense bonus (PredatorDen)
       if (creature.habitatId) {
         const hab    = useMapStore.getState().habitats.find((h) => h.id === creature.habitatId);
         const habDef = hab ? HABITAT_MAP.get(hab.habitatTypeId) : undefined;
         if (habDef?.sleepBonus.ravagerImmunity) return;
       }
       useCreatureStore.getState().removeCreature(r.targetId);
+      creaturesLostRef.current++;
     }
   }
 
   // ── Spawn wave ─────────────────────────────────────────────────────────
   function spawnWave(): void {
-    const { xp }                                       = useResourceStore.getState();
-    const { unlockedCols, unlockedRows, buildings }    = useMapStore.getState();
-    const { plants }                                   = usePlantStore.getState();
-    const { creatures }                                = useCreatureStore.getState();
+    const { xp }                                    = useResourceStore.getState();
+    const { unlockedCols, unlockedRows, buildings } = useMapStore.getState();
+    const { plants }                                = usePlantStore.getState();
+    const { creatures }                             = useCreatureStore.getState();
 
     const level = xpToLevel(xp);
     const count = ravagerCount(level);
     const wave  = createRavagerWave(count, unlockedCols, unlockedRows, plants, buildings, creatures);
+
+    // Reset wave stats
+    waveTotalRef.current       = count;
+    plantsLostRef.current      = 0;
+    creaturesLostRef.current   = 0;
+    resourcesStolenRef.current = {};
+    useRavagerStore.getState().resetWaveStats();
 
     useRavagerStore.getState().setRavagers(wave);
     useRavagerStore.getState().setWaveActiveUntil(Date.now() + WAVE_TIMEOUT_MS);
@@ -106,8 +115,20 @@ export function useRavagerEngine(): void {
     if (isEndingWave.current) return;
     isEndingWave.current = true;
 
+    const { waveDefeats } = useRavagerStore.getState();
+
     useRavagerStore.getState().clearRavagers();
     useRavagerStore.getState().setWaveActiveUntil(0);
+    useRavagerStore.getState().setFocusedRavager(null);
+
+    // Publish battle report
+    useRavagerStore.getState().setBattleReport({
+      ravagersDefeated: waveDefeats,
+      ravagersEscaped:  Math.max(0, waveTotalRef.current - waveDefeats),
+      plantsDestroyed:  plantsLostRef.current,
+      creaturesLost:    creaturesLostRef.current,
+      resourcesStolen:  { ...resourcesStolenRef.current },
+    });
 
     const nextAt = Date.now() + ATTACK_INTERVAL_MS;
     useRavagerStore.getState().setNextAttackAt(nextAt);
@@ -124,7 +145,6 @@ export function useRavagerEngine(): void {
     const now = Date.now();
     const { nextAttackAt, waveActiveUntil } = useRavagerStore.getState();
 
-    // 30-min warning notification
     if (
       !warningFiredRef.current &&
       nextAttackAt > 0 &&
@@ -135,28 +155,19 @@ export function useRavagerEngine(): void {
       notifyRavagerWarning();
     }
 
-    // Spawn wave when due
     if (!waveSpawnedRef.current && nextAttackAt > 0 && now >= nextAttackAt) {
-      // Guard against double-spawn after component remount
       const existing = useRavagerStore.getState().ravagers;
       waveSpawnedRef.current = true;
-      if (existing.length === 0) {
-        spawnWave();
-      }
+      if (existing.length === 0) spawnWave();
     }
 
-    // Force-end wave if it has been running too long
-    if (waveActiveUntil > 0 && now >= waveActiveUntil) {
-      endWave();
-    }
+    if (waveActiveUntil > 0 && now >= waveActiveUntil) endWave();
   }
 
   useEffect(() => {
-    // ── Initialization ───────────────────────────────────────────────────
     const init = async () => {
       const now = Date.now();
 
-      // First launch timestamp
       let firstLaunch = 0;
       try {
         const raw = await AsyncStorage.getItem(FIRST_LAUNCH_KEY);
@@ -167,7 +178,6 @@ export function useRavagerEngine(): void {
         }
       } catch { firstLaunch = now; }
 
-      // Next attack timestamp
       let nextAt = 0;
       try {
         const raw = await AsyncStorage.getItem(NEXT_RAVAGER_KEY);
@@ -186,13 +196,11 @@ export function useRavagerEngine(): void {
 
     init();
 
-    // ── Periodic check timer (every 30 s) ────────────────────────────────
     const checkTimer = setInterval(checkAttack, 30_000);
 
-    // ── AI tick (every 2 s) ───────────────────────────────────────────────
     const aiTimer = setInterval(() => {
-      const now            = Date.now();
-      const { ravagers }   = useRavagerStore.getState();
+      const now          = Date.now();
+      const { ravagers } = useRavagerStore.getState();
       if (ravagers.length === 0) return;
 
       for (const r of ravagers) {
@@ -204,13 +212,11 @@ export function useRavagerEngine(): void {
         }
       }
 
-      // End wave when all ravagers have retreated
       if (useRavagerStore.getState().ravagers.length === 0 && waveSpawnedRef.current) {
         endWave();
       }
     }, RAVAGER_AI_TICK_MS);
 
-    // ── AppState listener: re-check on foreground ─────────────────────────
     const appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
       if (next === 'active') checkAttack();
     });

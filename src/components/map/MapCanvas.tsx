@@ -58,7 +58,10 @@ import RavagerSprite from './RavagerSprite';
 import WarehouseBuilding from './WarehouseBuilding';
 import WarehousePanel from '../ui/WarehousePanel';
 import CaptureOverlay from '../ui/CaptureOverlay';
+import RavagerAlert from '../ui/RavagerAlert';
+import BattleResultModal from '../ui/BattleResultModal';
 import MiniMap from './MiniMap';
+import { interpolateRavagerPos } from '../../engine/RavagerEngine';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -108,6 +111,7 @@ export default function MapCanvas() {
   const selectBuilding    = useMapStore((s) => s.selectBuilding);
   const creatures         = useCreatureStore((s) => s.creatures);
   const ravagers          = useRavagerStore((s) => s.ravagers);
+  const setFocusedRavager = useRavagerStore((s) => s.setFocusedRavager);
   const plants            = usePlantStore((s) => s.plants);
   const selectedPlantType = usePlantStore((s) => s.selectedPlantType);
 
@@ -343,6 +347,21 @@ export default function MapCanvas() {
       const worldX = (sx - translateX.value) / scale.value;
       const worldY = (sy - translateY.value) / scale.value;
 
+      // Ravager tap — focus carnivore attacks on this ravager
+      const { ravagers: rs } = useRavagerStore.getState();
+      const RAVAGER_HIT_SQ = (TILE_SIZE * 0.7) ** 2;
+      const now = Date.now();
+      for (const r of rs) {
+        if (r.state === 'done') continue;
+        const rp = interpolateRavagerPos(r, now);
+        const dx = rp.x - worldX;
+        const dy = rp.y - worldY;
+        if (dx * dx + dy * dy < RAVAGER_HIT_SQ) {
+          setFocusedRavager(r.id);
+          return;
+        }
+      }
+
       const { creatures: cs, wakeCreature, affectCreature } = useCreatureStore.getState();
       const HIT_SQ = (TILE_SIZE * 0.9) ** 2;
 
@@ -401,7 +420,7 @@ export default function MapCanvas() {
         }
       }
     },
-    [translateX, scale],
+    [translateX, scale, setFocusedRavager],
   );
 
   // ── Long-press: start creature drag ──────────────────────────────────────
@@ -730,6 +749,12 @@ export default function MapCanvas() {
           onClose={() => setCaptureTarget(null)}
         />
       )}
+
+      {/* Ravager incoming warning banner */}
+      <RavagerAlert />
+
+      {/* Post-wave battle result modal */}
+      <BattleResultModal />
     </View>
   );
 }

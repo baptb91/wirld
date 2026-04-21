@@ -12,6 +12,7 @@ import { useEffect, useRef } from 'react';
 import { useCreatureStore, Creature } from '../store/creatureStore';
 import { useMapStore } from '../store/mapStore';
 import { usePlantStore } from '../store/plantStore';
+import { useRavagerStore } from '../store/ravagerStore';
 import { HABITAT_MAP } from '../constants/habitats';
 import { SPECIES_MAP } from '../constants/creatures';
 import { TILE_SIZE } from '../constants/terrain';
@@ -22,7 +23,13 @@ import {
   randomPauseDuration,
   resolveScheduleState,
   isCreatureCompatibleWithHabitat,
+  WALK_SPEED_PX_PER_MS,
 } from '../engine/CreatureAI';
+import { interpolateRavagerPos } from '../engine/RavagerEngine';
+
+const COMBAT_RANGE_PX  = 5 * TILE_SIZE;
+const COMBAT_RANGE_SQ  = COMBAT_RANGE_PX ** 2;
+const MELEE_RANGE_SQ   = (TILE_SIZE * 1.5) ** 2;
 
 const AUTO_ASSIGN_RANGE_PX = 8 * TILE_SIZE; // 8-tile radius
 
@@ -92,6 +99,51 @@ export function useCreatureAI(): void {
       }
 
       if (c.state !== 'active') return;
+
+      // ── Carnivore combat: override wander when ravagers are present ────────
+      if (SPECIES_MAP.get(c.speciesId)?.type === 'carnivore') {
+        const { ravagers, focusedRavagerId } = useRavagerStore.getState();
+        const movingRavagers = ravagers.filter((r) => r.state === 'moving');
+
+        if (movingRavagers.length > 0) {
+          // Prefer focused ravager; otherwise find nearest within 5 tiles
+          let target = movingRavagers.find((r) => r.id === focusedRavagerId) ?? null;
+
+          if (!target) {
+            let minDistSq = COMBAT_RANGE_SQ;
+            for (const r of movingRavagers) {
+              const rp = interpolateRavagerPos(r, now);
+              const dx = rp.x - c.targetPosition.x;
+              const dy = rp.y - c.targetPosition.y;
+              const dSq = dx * dx + dy * dy;
+              if (dSq < minDistSq) { minDistSq = dSq; target = r; }
+            }
+          }
+
+          if (target) {
+            const rp  = interpolateRavagerPos(target, now);
+            const dx  = rp.x - c.targetPosition.x;
+            const dy  = rp.y - c.targetPosition.y;
+            const dSq = dx * dx + dy * dy;
+
+            // Melee damage when close enough
+            if (dSq < MELEE_RANGE_SQ) {
+              useRavagerStore.getState().damageRavager(target.id, 1);
+            }
+
+            // Always walk toward target, bypassing nextMoveAt
+            const dist   = Math.sqrt(dSq);
+            const walkMs = dist / WALK_SPEED_PX_PER_MS;
+            updateCreature(c.id, {
+              position:       c.targetPosition,
+              targetPosition: rp,
+              nextMoveAt:     now + walkMs + 200,
+            });
+            return;
+          }
+        }
+      }
+
       if (now < c.nextMoveAt) return;
 
       // Pick a new wander target and schedule the next move

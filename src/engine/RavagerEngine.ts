@@ -36,8 +36,11 @@ export const RAVAGER_SPEED_PX_PER_MS = TILE_SIZE / 1800;     // ~26 px/s
 // Ravager entity
 // ---------------------------------------------------------------------------
 
+export const RAVAGER_MAX_HP = 5;
+
 export interface Ravager {
   id:         string;
+  spawnedAt:  number;                    // UTC ms — wave creation time
   spawnPx:    { x: number; y: number };  // off-screen entry point
   targetPx:   { x: number; y: number };  // attack destination
   arrivalAt:  number;                    // UTC ms — when ravager reaches targetPx
@@ -47,6 +50,35 @@ export interface Ravager {
   targetType: 'plant' | 'warehouse' | 'herbivore' | 'center';
   targetId:   string | null;
   state:      'moving' | 'retreating' | 'done';
+  hp:         number;
+  maxHp:      number;
+}
+
+// ---------------------------------------------------------------------------
+// Interpolated world-space position (for logic / hit tests)
+// ---------------------------------------------------------------------------
+
+export function interpolateRavagerPos(
+  r: Ravager,
+  now: number,
+): { x: number; y: number } {
+  if (r.state === 'moving') {
+    const total = r.arrivalAt - r.spawnedAt;
+    const t     = total > 0 ? Math.max(0, Math.min(1, (now - r.spawnedAt) / total)) : 1;
+    return {
+      x: r.spawnPx.x + (r.targetPx.x - r.spawnPx.x) * t,
+      y: r.spawnPx.y + (r.targetPx.y - r.spawnPx.y) * t,
+    };
+  }
+  if (r.state === 'retreating') {
+    const total = r.retreatAt - r.arrivalAt;
+    const t     = total > 0 ? Math.max(0, Math.min(1, (now - r.arrivalAt) / total)) : 1;
+    return {
+      x: r.targetPx.x + (r.retreatPx.x - r.targetPx.x) * t,
+      y: r.targetPx.y + (r.retreatPx.y - r.targetPx.y) * t,
+    };
+  }
+  return r.targetPx;
 }
 
 // ---------------------------------------------------------------------------
@@ -186,6 +218,7 @@ export function createRavagerWave(
 
     ravagers.push({
       id:         `ravager-${now}-${i}`,
+      spawnedAt:  now,
       spawnPx:    spawn,
       targetPx:   tgt.px,
       arrivalAt:  arrive,
@@ -195,6 +228,8 @@ export function createRavagerWave(
       targetType: tgt.type,
       targetId:   tgt.id,
       state:      'moving',
+      hp:         RAVAGER_MAX_HP,
+      maxHp:      RAVAGER_MAX_HP,
     });
   }
 

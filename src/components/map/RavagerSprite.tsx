@@ -10,7 +10,7 @@
  * positioning.
  */
 import React, { memo, useEffect } from 'react';
-import { Circle, Group } from '@shopify/react-native-skia';
+import { Circle, Group, Rect } from '@shopify/react-native-skia';
 import {
   cancelAnimation,
   Easing,
@@ -112,9 +112,20 @@ const RavagerSprite = memo(function RavagerSprite({ ravager }: Props) {
     { translateY: posY.value },
   ]);
 
+  const hpFrac = ravager.hp / ravager.maxHp;
+
   return (
     <Group transform={posTransform}>
       <RavagerBody />
+      {/* HP bar — shown only when damaged */}
+      {hpFrac < 1 && (
+        <Group>
+          {/* Background */}
+          <Rect x={-14} y={-28} width={28} height={4} color="rgba(0,0,0,0.5)" />
+          {/* Fill */}
+          <Rect x={-14} y={-28} width={28 * hpFrac} height={4} color="#FF2222" />
+        </Group>
+      )}
     </Group>
   );
 });
