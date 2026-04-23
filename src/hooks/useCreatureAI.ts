@@ -204,12 +204,15 @@ export function useCreatureAI(): void {
         // Auto-assign to nearest compatible habitat if not already housed
         if (!c.habitatId) autoAssignToHabitat(c);
       } else {
-        // Natural wake-up — increment sleep-cycle counter if housed
+        // Natural wake-up — increment sleep-cycle counter if housed;
+        // apply -5 happiness penalty if the creature slept without a habitat
         updateCreature(c.id, {
           state: 'active',
           nextMoveAt: now + 500,
           sleepInterrupts: 0,
-          ...(c.habitatId ? { sleepCyclesInHabitat: (c.sleepCyclesInHabitat ?? 0) + 1 } : {}),
+          ...(c.habitatId
+            ? { sleepCyclesInHabitat: (c.sleepCyclesInHabitat ?? 0) + 1 }
+            : { happiness: Math.max(0, c.happiness - 5) }),
         });
       }
     });

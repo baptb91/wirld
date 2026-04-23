@@ -172,9 +172,10 @@ export const useCreatureStore = create<CreatureState2 & CreatureActions>(
       set((s) => ({
         creatures: s.creatures.map((c) => {
           if (c.id !== id || c.state !== 'sleeping') return c;
+          // -3 happiness when forcefully woken beyond the 2nd time in a sleep cycle
           const happiness =
-            now - c.lastWokenAt < 10_000
-              ? Math.max(0, c.happiness - 3) // penalty for tapping again < 10s
+            c.sleepInterrupts >= 2
+              ? Math.max(0, c.happiness - 3)
               : c.happiness;
           return {
             ...c,
@@ -202,8 +203,8 @@ export const useCreatureStore = create<CreatureState2 & CreatureActions>(
       set((s) => ({
         creatures: s.creatures.map((c) => {
           if (c.id !== id || c.state !== 'active') return c;
-          // +5 happiness, max 1 per hour
-          // (simplification: always apply for Phase 2)
+          // +5 happiness, max once per hour
+          if (now - c.lastAffectedAt < 3_600_000) return c;
           return {
             ...c,
             happiness: Math.min(100, c.happiness + 5),

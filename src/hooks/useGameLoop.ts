@@ -26,6 +26,7 @@ import { HABITAT_MAP } from '../constants/habitats';
 import { AUTO_WATER_AMOUNT, AUTO_WATER_RANGE_TILES } from '../constants/plants';
 import { TILE_SIZE } from '../constants/terrain';
 import { notifyCarnivoreHungry } from '../services/NotificationService';
+import { computeHappinessDelta, productionMultiplier } from '../engine/HappinessEngine';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -46,6 +47,11 @@ const HUNGER_PER_MS       = 5 / (60 * 60 * 1000);
 const VIVARIUM_INTERVAL_MS     = 24 * 60 * 60 * 1000;
 const VIVARIUM_FISH_PER_CYCLE  = 3;
 
+/** Happiness tick: once per hour */
+const HAPPINESS_TICK_MS = 3_600_000;
+/** Module-level timestamp so we don't re-run within the same hour */
+let lastHappinessTickAt = 0;
+
 // ---------------------------------------------------------------------------
 // AsyncStorage helpers
 // ---------------------------------------------------------------------------
@@ -64,6 +70,31 @@ async function saveLastTick(ts: number): Promise<void> {
     await AsyncStorage.setItem(LAST_TICK_KEY, String(ts));
   } catch {
     // silently ignore storage failures
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Happiness tick — runs at most once per hour
+// ---------------------------------------------------------------------------
+
+function runHappinessTick(now: number): void {
+  if (now - lastHappinessTickAt < HAPPINESS_TICK_MS) return;
+  lastHappinessTickAt = now;
+
+  const { creatures }   = useCreatureStore.getState();
+  const { habitats, terrainGrid } = useMapStore.getState();
+
+  for (const creature of creatures) {
+    const delta = computeHappinessDelta(creature, {
+      habitats,
+      allCreatures: creatures,
+      terrainGrid,
+    });
+    if (delta === 0) continue;
+    const newHappiness = Math.max(0, Math.min(100, creature.happiness + delta));
+    if (newHappiness !== creature.happiness) {
+      useCreatureStore.getState().updateCreature(creature.id, { happiness: newHappiness });
+    }
   }
 }
 
@@ -132,9 +163,7 @@ function runProductionTick(now: number): void {
 
     const intervals = Math.floor(elapsed / intervalMs);
 
-    let mult =
-      creature.happiness >= 80 ? 1.5 :
-      creature.happiness >= 50 ? 1.0 : 0.5;
+    let mult = productionMultiplier(creature.happiness);
 
     if (creature.isShiny) mult *= 2;
 
@@ -241,6 +270,7 @@ async function applyOfflineProgress(): Promise<void> {
   const before = snapshotResources();
 
   // ── Apply offline progress ──────────────────────────────────────────────
+  runHappinessTick(now);
   runProductionTick(now);
   if (cappedElapsedMs > 0) {
     runOfflineAutoWater(cappedElapsedMs);
@@ -275,8 +305,10 @@ export function useGameLoop(): void {
   const startInterval = () => {
     if (intervalRef.current) return;
     intervalRef.current = setInterval(async () => {
-      runProductionTick(Date.now());
-      await saveLastTick(Date.now());
+      const now = Date.now();
+      runHappinessTick(now);
+      runProductionTick(now);
+      await saveLastTick(now);
     }, TICK_MS);
   };
 
