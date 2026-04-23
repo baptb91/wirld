@@ -40,6 +40,7 @@ import { SPECIES_MAP } from '../../constants/creatures';
 import { PLANT_MAP, MANUAL_WATER_AMOUNT } from '../../constants/plants';
 import { isCreatureCompatibleWithHabitat } from '../../engine/CreatureAI';
 import { findBreedPair } from '../../engine/BreedingEngine';
+import { findHybridResult } from '../../engine/HybridBreedingEngine';
 import {
   TILE_SIZE,
   GRID_COLS,
@@ -57,6 +58,7 @@ import PlantSprite from './PlantSprite';
 import CreatureSprite from './CreatureSprite';
 import RavagerSprite from './RavagerSprite';
 import WarehouseBuilding from './WarehouseBuilding';
+import LaboratoryBuilding from './LaboratoryBuilding';
 import WarehousePanel from '../ui/WarehousePanel';
 import CaptureOverlay from '../ui/CaptureOverlay';
 import RavagerAlert from '../ui/RavagerAlert';
@@ -65,6 +67,7 @@ import DefensePanel from '../ui/DefensePanel';
 import CarnivoreHungerPanel from '../ui/CarnivoreHungerPanel';
 import TransformerPanel from '../ui/TransformerPanel';
 import BreedingPanel from '../ui/BreedingPanel';
+import HybridBreedingPanel from '../ui/HybridBreedingPanel';
 import MiniMap from './MiniMap';
 import { interpolateRavagerPos } from '../../engine/RavagerEngine';
 
@@ -125,6 +128,7 @@ export default function MapCanvas() {
   const [captureTarget, setCaptureTarget]               = useState<Creature | null>(null);
   const [hungerTarget, setHungerTarget]                 = useState<Creature | null>(null);
   const [breedingHabitatId, setBreedingHabitatId]       = useState<string | null>(null);
+  const [hybridPanelState, setHybridPanelState]         = useState<{ buildingId: string; firstCreatureId?: string } | null>(null);
 
   const period = useDayNight();
 
@@ -440,6 +444,8 @@ export default function MapCanvas() {
             setWarehousePanelOpen(true);
           } else if (b.buildingTypeId === 'transformer') {
             setTransformerPanelOpen(true);
+          } else if (b.buildingTypeId === 'laboratory') {
+            setHybridPanelState({ buildingId: b.id });
           }
           return;
         }
@@ -539,7 +545,31 @@ export default function MapCanvas() {
           return;
         }
       }
-      // Dropped outside any valid target — no change
+      // No habitat matched — check Laboratory for hybrid breeding
+      const { buildings: labs } = useMapStore.getState();
+      for (const b of labs) {
+        if (b.buildingTypeId !== 'laboratory') continue;
+        if (b.hybridGestationEndsAt) continue; // already gestating
+        const def = BUILDING_MAP.get(b.buildingTypeId);
+        if (!def) continue;
+        const bX = b.tileX * TILE_SIZE;
+        const bY = b.tileY * TILE_SIZE;
+        const bW = def.tileSize * TILE_SIZE;
+        if (worldX >= bX && worldX <= bX + bW && worldY >= bY && worldY <= bY + bW) {
+          // Check if this creature has any valid hybrid partner owned by player
+          const { creatures: cs } = useCreatureStore.getState();
+          const hasPartner = cs.some(
+            (c) =>
+              c.id !== creature.id &&
+              c.wildExpiresAt === null &&
+              findHybridResult(creature.speciesId, c.speciesId) !== null,
+          );
+          if (hasPartner) {
+            setHybridPanelState({ buildingId: b.id, firstCreatureId: creature.id });
+          }
+          return;
+        }
+      }
     },
     [translateX, scale],
   );
@@ -714,14 +744,24 @@ export default function MapCanvas() {
               })}
 
               {/* ── Building layer (above habitats, below creatures) ── */}
-              {buildings.map((b) => (
-                <WarehouseBuilding
-                  key={b.id}
-                  x={b.tileX * TILE_SIZE}
-                  y={b.tileY * TILE_SIZE}
-                  isSelected={selectedBuilding === b.buildingTypeId}
-                />
-              ))}
+              {buildings.map((b) =>
+                b.buildingTypeId === 'laboratory' ? (
+                  <LaboratoryBuilding
+                    key={b.id}
+                    x={b.tileX * TILE_SIZE}
+                    y={b.tileY * TILE_SIZE}
+                    isSelected={selectedBuilding === b.buildingTypeId}
+                    gestating={!!(b.hybridGestationEndsAt && b.hybridGestationEndsAt > Date.now())}
+                  />
+                ) : (
+                  <WarehouseBuilding
+                    key={b.id}
+                    x={b.tileX * TILE_SIZE}
+                    y={b.tileY * TILE_SIZE}
+                    isSelected={selectedBuilding === b.buildingTypeId}
+                  />
+                ),
+              )}
 
               {/* ── Creature layer ── */}
               {creatures.map((creature) => (
@@ -811,6 +851,15 @@ export default function MapCanvas() {
         <BreedingPanel
           habitatId={breedingHabitatId}
           onClose={() => setBreedingHabitatId(null)}
+        />
+      )}
+
+      {/* Hybrid breeding panel — shown when dragging creature onto Laboratory or tapping lab */}
+      {hybridPanelState && (
+        <HybridBreedingPanel
+          buildingId={hybridPanelState.buildingId}
+          firstCreatureId={hybridPanelState.firstCreatureId}
+          onClose={() => setHybridPanelState(null)}
         />
       )}
 

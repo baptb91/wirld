@@ -32,6 +32,12 @@ export interface BuildingPlacement {
   defenseHp?: number;
   /** Vivarium: UTC ms of last fish production */
   lastProducedAt?: number;
+  /** Laboratory: hybrid gestation result species */
+  hybridSpeciesId?: string;
+  /** Laboratory: UTC ms when hybrid gestation completes */
+  hybridGestationEndsAt?: number;
+  /** Laboratory: [creatureIdA, creatureIdB] used as parents */
+  hybridParentIds?: [string, string];
 }
 
 export interface HabitatPlacement {
