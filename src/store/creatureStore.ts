@@ -40,6 +40,8 @@ export interface Creature {
    * number = UTC ms when a wild creature leaves if still unassigned.
    */
   wildExpiresAt: number | null;
+  /** How many full sleep cycles this creature has completed while in its current habitat. */
+  sleepCyclesInHabitat: number;
 }
 
 export interface CreatureState2 {
@@ -94,6 +96,7 @@ function makeStarter(): Creature[] {
       sleepInterrupts: 0,
       lastAffectedAt: 0,
       wildExpiresAt: null,
+      sleepCyclesInHabitat: 0,
     },
     {
       id: 'starter-broutard-1',
@@ -115,6 +118,7 @@ function makeStarter(): Creature[] {
       sleepInterrupts: 0,
       lastAffectedAt: 0,
       wildExpiresAt: null,
+      sleepCyclesInHabitat: 0,
     },
     {
       id: 'starter-flottin-1',
@@ -136,6 +140,7 @@ function makeStarter(): Creature[] {
       sleepInterrupts: 0,
       lastAffectedAt: 0,
       wildExpiresAt: null,
+      sleepCyclesInHabitat: 0,
     },
   ];
 }

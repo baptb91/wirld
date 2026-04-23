@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '../../src/constants/theme';
 import { useGameLoop } from '../../src/hooks/useGameLoop';
 import { useCreatureAI } from '../../src/hooks/useCreatureAI';
+import { useBreedingEngine } from '../../src/hooks/useBreedingEngine';
 import OfflineSummaryModal from '../../src/components/ui/OfflineSummaryModal';
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
@@ -17,6 +18,7 @@ export default function TabLayout() {
   // Game-loop hooks live here so they run regardless of which tab is active
   useGameLoop();
   useCreatureAI();
+  useBreedingEngine();
 
   return (
     <View style={styles.root}>

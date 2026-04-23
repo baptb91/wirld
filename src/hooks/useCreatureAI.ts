@@ -63,7 +63,7 @@ function autoAssignToHabitat(creature: Creature): void {
 
   if (bestHabitatId) {
     assignCreatureToHabitat(bestHabitatId, creature.id);
-    updateCreature(creature.id, { habitatId: bestHabitatId });
+    updateCreature(creature.id, { habitatId: bestHabitatId, sleepCyclesInHabitat: 0 });
   }
 }
 
@@ -204,11 +204,12 @@ export function useCreatureAI(): void {
         // Auto-assign to nearest compatible habitat if not already housed
         if (!c.habitatId) autoAssignToHabitat(c);
       } else {
-        // Natural wake-up
+        // Natural wake-up — increment sleep-cycle counter if housed
         updateCreature(c.id, {
           state: 'active',
           nextMoveAt: now + 500,
           sleepInterrupts: 0,
+          ...(c.habitatId ? { sleepCyclesInHabitat: (c.sleepCyclesInHabitat ?? 0) + 1 } : {}),
         });
       }
     });

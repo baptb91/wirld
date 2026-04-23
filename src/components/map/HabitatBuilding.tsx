@@ -16,7 +16,7 @@
  *   - OccupancyDots: small circles showing filled / empty capacity slots.
  *   - highlighted prop: green border when dragging a compatible creature.
  */
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useEffect } from 'react';
 import {
   Circle,
   Group,
@@ -26,7 +26,15 @@ import {
   RoundedRect,
   Skia,
 } from '@shopify/react-native-skia';
-import { useDerivedValue, SharedValue } from 'react-native-reanimated';
+import {
+  useDerivedValue,
+  useSharedValue,
+  cancelAnimation,
+  withRepeat,
+  withSequence,
+  withTiming,
+  SharedValue,
+} from 'react-native-reanimated';
 import { TILE_SIZE } from '../../constants/terrain';
 import { HABITAT_MAP } from '../../constants/habitats';
 
@@ -115,6 +123,56 @@ function DoorPanel({ w, h, openProgress, invert }: {
       {/* Lock / latch knob */}
       <Circle cx={w / 2} cy={h * 0.57} r={5.5} color="rgba(200,160,50,0.88)" />
       <Circle cx={w / 2} cy={h * 0.57} r={2.5} color="rgba(130,90,20,0.92)" />
+    </Group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Breeding-ready heart — pulsing pink indicator when a breeding pair is present
+// ---------------------------------------------------------------------------
+
+function BreedingHeart({ w, active }: { w: number; active: boolean }) {
+  const pulse = useSharedValue(1);
+
+  useEffect(() => {
+    if (active) {
+      pulse.value = withRepeat(
+        withSequence(
+          withTiming(1.35, { duration: 550 }),
+          withTiming(1.0,  { duration: 550 }),
+        ),
+        -1,
+        false,
+      );
+    } else {
+      cancelAnimation(pulse);
+      pulse.value = withTiming(1.0, { duration: 200 });
+    }
+  }, [active]);
+
+  const cx = w / 2;
+  const cy = 10;
+
+  const transform = useDerivedValue(() => [
+    { translateX: cx },
+    { translateY: cy },
+    { scale: pulse.value },
+    { translateX: -cx },
+    { translateY: -cy },
+  ]);
+
+  if (!active) return null;
+
+  return (
+    <Group transform={transform}>
+      {/* Outer glow */}
+      <Circle cx={cx} cy={cy} r={11} color="rgba(236,72,153,0.30)" />
+      {/* Heart body — two offset circles + diamond */}
+      <Circle cx={cx - 4} cy={cy - 1} r={6} color="rgba(236,72,153,0.92)" />
+      <Circle cx={cx + 4} cy={cy - 1} r={6} color="rgba(236,72,153,0.92)" />
+      <Circle cx={cx}     cy={cy + 4} r={6} color="rgba(236,72,153,0.92)" />
+      {/* Highlight */}
+      <Circle cx={cx - 2} cy={cy - 3} r={2} color="rgba(255,200,220,0.70)" />
     </Group>
   );
 }
@@ -487,6 +545,8 @@ export interface HabitatBuildingProps {
   capacity?: number;
   /** True while the player is dragging a compatible creature onto the map */
   highlighted?: boolean;
+  /** True when a valid breeding pair is present and no gestation is active */
+  breedReady?: boolean;
 }
 
 const HabitatBuilding = memo(function HabitatBuilding({
@@ -498,6 +558,7 @@ const HabitatBuilding = memo(function HabitatBuilding({
   occupancy = 0,
   capacity = 0,
   highlighted = false,
+  breedReady = false,
 }: HabitatBuildingProps) {
   const def      = HABITAT_MAP.get(typeId);
   const tileSize = def?.tileSize ?? 2;
@@ -535,6 +596,9 @@ const HabitatBuilding = memo(function HabitatBuilding({
 
       {/* Occupancy dots — top-right corner */}
       <OccupancyDots w={W} occupancy={occupancy} capacity={capacity} />
+
+      {/* Breeding-ready heart — pulses at top-center when pair conditions are met */}
+      <BreedingHeart w={W} active={breedReady} />
 
       {/* Borders: drag-target highlight (green) takes priority over selection (yellow) */}
       {highlighted && <SelectionBorder w={W} h={W} color="rgba(52,211,153,0.92)" />}

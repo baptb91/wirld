@@ -40,6 +40,12 @@ export interface HabitatPlacement {
   tileX: number;
   tileY: number;
   assignedCreatureIds: string[];
+  /** Species being gestated (set when breeding starts) */
+  gestatingSpeciesId?: string;
+  /** UTC ms when gestation completes */
+  gestationEndsAt?: number;
+  /** ID of the creature staying in the habitat during gestation */
+  gestatingCreatureId?: string;
 }
 
 export interface MapState {
@@ -76,6 +82,7 @@ export interface MapActions {
   updateBuilding: (id: string, updates: Partial<BuildingPlacement>) => void;
   removeBuilding: (id: string) => void;
   placeHabitat: (placement: HabitatPlacement) => void;
+  updateHabitat: (id: string, updates: Partial<HabitatPlacement>) => void;
   removeHabitat: (id: string) => void;
   assignCreatureToHabitat: (habitatId: string, creatureId: string) => void;
   unassignCreatureFromHabitat: (habitatId: string, creatureId: string) => void;
@@ -207,6 +214,11 @@ export const useMapStore = create<MapState & MapActions>((set, get) => ({
     if (!useResourceStore.getState().spendGold(def.baseCost)) return;
     set((s) => ({ habitats: [...s.habitats, placement] }));
   },
+
+  updateHabitat: (id, updates) =>
+    set((s) => ({
+      habitats: s.habitats.map((h) => (h.id === id ? { ...h, ...updates } : h)),
+    })),
 
   removeHabitat: (id) =>
     set((state) => ({

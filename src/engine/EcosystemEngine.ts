@@ -210,5 +210,6 @@ export function createWildCreature(
     sleepInterrupts: 0,
     lastAffectedAt: 0,
     wildExpiresAt:  now + WILD_LIFESPAN_MS,
+    sleepCyclesInHabitat: 0,
   };
 }

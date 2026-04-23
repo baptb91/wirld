@@ -39,6 +39,7 @@ import { BUILDING_MAP } from '../../constants/buildings';
 import { SPECIES_MAP } from '../../constants/creatures';
 import { PLANT_MAP, MANUAL_WATER_AMOUNT } from '../../constants/plants';
 import { isCreatureCompatibleWithHabitat } from '../../engine/CreatureAI';
+import { findBreedPair } from '../../engine/BreedingEngine';
 import {
   TILE_SIZE,
   GRID_COLS,
@@ -63,6 +64,7 @@ import BattleResultModal from '../ui/BattleResultModal';
 import DefensePanel from '../ui/DefensePanel';
 import CarnivoreHungerPanel from '../ui/CarnivoreHungerPanel';
 import TransformerPanel from '../ui/TransformerPanel';
+import BreedingPanel from '../ui/BreedingPanel';
 import MiniMap from './MiniMap';
 import { interpolateRavagerPos } from '../../engine/RavagerEngine';
 
@@ -122,6 +124,7 @@ export default function MapCanvas() {
   const [transformerPanelOpen, setTransformerPanelOpen] = useState(false);
   const [captureTarget, setCaptureTarget]               = useState<Creature | null>(null);
   const [hungerTarget, setHungerTarget]                 = useState<Creature | null>(null);
+  const [breedingHabitatId, setBreedingHabitatId]       = useState<string | null>(null);
 
   const period = useDayNight();
 
@@ -232,6 +235,16 @@ export default function MapCanvas() {
         .map((h) => h.id),
     );
   }, [draggingChip, habitats]);
+
+  // ── Breed-ready habitat IDs ───────────────────────────────────────────────
+  const breedReadyHabitatIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const h of habitats) {
+      if (h.gestationEndsAt) continue; // already gestating
+      if (findBreedPair(h, creatures)) set.add(h.id);
+    }
+    return set;
+  }, [habitats, creatures]);
 
   // ── Drag chip animated style ──────────────────────────────────────────────
   const dragChipStyle = useAnimatedStyle(() => ({
@@ -431,6 +444,20 @@ export default function MapCanvas() {
           return;
         }
       }
+
+      // Check habitats — open breeding panel
+      const { habitats: hs2 } = useMapStore.getState();
+      for (const h of hs2) {
+        const def = HABITAT_MAP.get(h.habitatTypeId);
+        if (!def) continue;
+        const hX = h.tileX * TILE_SIZE;
+        const hY = h.tileY * TILE_SIZE;
+        const hW = def.tileSize * TILE_SIZE;
+        if (worldX >= hX && worldX <= hX + hW && worldY >= hY && worldY <= hY + hW) {
+          setBreedingHabitatId(h.id);
+          return;
+        }
+      }
     },
     [translateX, scale, setFocusedRavager],
   );
@@ -505,8 +532,9 @@ export default function MapCanvas() {
             assignCreatureToHabitat(h.id, creature.id);
           }
           useCreatureStore.getState().updateCreature(creature.id, {
-            habitatId: h.id,
-            wildExpiresAt: null, // creature is now captured — won't depart
+            habitatId:            h.id,
+            wildExpiresAt:        null, // creature is now captured — won't depart
+            sleepCyclesInHabitat: 0,
           });
           return;
         }
@@ -680,6 +708,7 @@ export default function MapCanvas() {
                     occupancy={h.assignedCreatureIds.length}
                     capacity={def?.capacity ?? 0}
                     highlighted={compatibleHabitatIds.has(h.id)}
+                    breedReady={breedReadyHabitatIds.has(h.id)}
                   />
                 );
               })}
@@ -774,6 +803,14 @@ export default function MapCanvas() {
       {transformerPanelOpen && (
         <TransformerPanel
           onClose={() => setTransformerPanelOpen(false)}
+        />
+      )}
+
+      {/* Breeding panel — shown when tapping any habitat */}
+      {breedingHabitatId && (
+        <BreedingPanel
+          habitatId={breedingHabitatId}
+          onClose={() => setBreedingHabitatId(null)}
         />
       )}
 
