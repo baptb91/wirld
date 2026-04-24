@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { theme } from '../../constants/theme';
+import { theme, useTheme } from '../../constants/theme';
 import { useResourceStore } from '../../store/resourceStore';
 import {
   RESOURCE_DISPLAY,
@@ -50,8 +50,10 @@ export default function ResourceBar() {
 }
 
 function Pill({ emoji, value, color }: { emoji: string; value: number; color: string }) {
+  const { isDark } = useTheme();
+  const pillBg = isDark ? 'rgba(44,44,46,0.92)' : 'rgba(245,240,232,0.92)';
   return (
-    <View style={[styles.pill, { borderColor: color }]}>
+    <View style={[styles.pill, { borderColor: color, backgroundColor: pillBg }]}>
       <Text style={styles.pillIcon}>{emoji}</Text>
       <Text style={[styles.pillValue, { color }]}>{formatAmount(value)}</Text>
     </View>

@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { useEffect } from 'react';
-import { theme } from '../../src/constants/theme';
+import { theme, useTheme } from '../../src/constants/theme';
 import { useGameLoop } from '../../src/hooks/useGameLoop';
 import { useCreatureAI } from '../../src/hooks/useCreatureAI';
 import { useBreedingEngine } from '../../src/hooks/useBreedingEngine';
@@ -24,6 +24,7 @@ export default function TabLayout() {
   useBreedingEngine();
 
   const ambientEnabled = useSettingsStore((s) => s.ambientEnabled);
+  const { colors } = useTheme();
 
   useEffect(() => {
     useSettingsStore.getState().loadSettings();
@@ -43,9 +44,15 @@ export default function TabLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarStyle: styles.tabBar,
-          tabBarActiveTintColor: theme.colors.tabActive,
-          tabBarInactiveTintColor: theme.colors.tabInactive,
+          tabBarStyle: {
+            backgroundColor: colors.tabBar,
+            borderTopColor: colors.border,
+            borderTopWidth: 1,
+            height: 58,
+            paddingBottom: 6,
+          },
+          tabBarActiveTintColor: colors.tabActive,
+          tabBarInactiveTintColor: colors.tabInactive,
           tabBarLabelStyle: styles.tabLabel,
         }}
       >
@@ -81,13 +88,6 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-  },
-  tabBar: {
-    backgroundColor: theme.colors.tabBar,
-    borderTopColor: theme.colors.border,
-    borderTopWidth: 1,
-    height: 58,
-    paddingBottom: 6,
   },
   tabLabel: {
     fontFamily: theme.fonts.body,

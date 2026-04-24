@@ -14,7 +14,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { theme } from '../../constants/theme';
+import { theme, useTheme } from '../../constants/theme';
 import { TERRAIN_TYPES, TERRAIN_CONFIG, TerrainType } from '../../constants/terrain';
 import { HABITAT_TYPES } from '../../constants/habitats';
 import { PLANT_TYPES } from '../../constants/plants';
@@ -34,6 +34,10 @@ export default function ActionMenu() {
   const mapFullyUnlocked = unlockedCols >= GRID_COLS && unlockedRows >= GRID_ROWS;
   const canAffordExpansion = gold >= MAP_EXPANSION_COST;
   const [tab, setTab] = useState<MenuTab>('terrain');
+  const { colors, isDark } = useTheme();
+  const trayBg   = isDark ? 'rgba(28,28,30,0.96)'    : 'rgba(245,240,232,0.96)';
+  const tabRowBg = isDark ? 'rgba(255,255,255,0.08)'  : 'rgba(80,60,20,0.10)';
+  const toolBg   = isDark ? 'rgba(255,255,255,0.10)'  : 'rgba(255,255,255,0.60)';
 
   const handleTabPress = (next: MenuTab) => {
     setTab(next);
@@ -76,10 +80,10 @@ export default function ActionMenu() {
 
   return (
     <View style={styles.container} pointerEvents="box-none">
-      <View style={styles.tray} pointerEvents="box-none">
+      <View style={[styles.tray, { backgroundColor: trayBg }]} pointerEvents="box-none">
 
         {/* ── Tab toggle ── */}
-        <View style={styles.tabRow} pointerEvents="auto">
+        <View style={[styles.tabRow, { backgroundColor: tabRowBg }]} pointerEvents="auto">
           <Pressable
             onPress={() => handleTabPress('terrain')}
             style={[styles.tabBtn, tab === 'terrain' && styles.tabBtnActive]}
@@ -131,7 +135,7 @@ export default function ActionMenu() {
                   onPress={() => handleToolPress(type)}
                   style={({ pressed }) => [
                     styles.toolBtn,
-                    { borderColor: cfg.color },
+                    { borderColor: cfg.color, backgroundColor: toolBg },
                     active  && { backgroundColor: cfg.color, transform: [{ scale: 1.08 }] },
                     pressed && { opacity: 0.75 },
                   ]}
@@ -156,6 +160,7 @@ export default function ActionMenu() {
               style={({ pressed }) => [
                 styles.toolBtn,
                 styles.navBtn,
+                { backgroundColor: toolBg },
                 !selectedTool && styles.navBtnActive,
                 pressed && { opacity: 0.75 },
               ]}
@@ -186,6 +191,7 @@ export default function ActionMenu() {
                   style={({ pressed }) => [
                     styles.toolBtn,
                     styles.habitatBtn,
+                    { backgroundColor: toolBg },
                     active  && styles.habitatBtnActive,
                     pressed && { opacity: 0.75 },
                   ]}
@@ -222,6 +228,7 @@ export default function ActionMenu() {
                   style={({ pressed }) => [
                     styles.toolBtn,
                     styles.plantBtn,
+                    { backgroundColor: toolBg },
                     active  && styles.plantBtnActive,
                     pressed && { opacity: 0.75 },
                   ]}
@@ -258,6 +265,7 @@ export default function ActionMenu() {
                   style={({ pressed }) => [
                     styles.toolBtn,
                     styles.buildingBtn,
+                    { backgroundColor: toolBg },
                     active  && styles.buildingBtnActive,
                     pressed && { opacity: 0.75 },
                   ]}
@@ -282,6 +290,7 @@ export default function ActionMenu() {
               style={({ pressed }) => [
                 styles.toolBtn,
                 styles.expandBtn,
+                { backgroundColor: toolBg },
                 mapFullyUnlocked && styles.expandBtnDone,
                 !mapFullyUnlocked && !canAffordExpansion && styles.expandBtnLocked,
                 pressed && !mapFullyUnlocked && { opacity: 0.75 },
@@ -301,8 +310,8 @@ export default function ActionMenu() {
         )}
 
         {/* Mode label pill */}
-        <View style={styles.modePill} pointerEvents="none">
-          <Text style={styles.modeText}>{modeLabel}</Text>
+        <View style={[styles.modePill, isDark && { backgroundColor: 'rgba(255,255,255,0.06)' }]} pointerEvents="none">
+          <Text style={[styles.modeText, { color: colors.textMuted }]}>{modeLabel}</Text>
         </View>
       </View>
     </View>

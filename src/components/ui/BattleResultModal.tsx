@@ -17,10 +17,13 @@ import {
   RESOURCE_DISPLAY,
   RESOURCE_DISPLAY_FALLBACK,
 } from '../../constants/resourceDisplay';
+import { useTheme } from '../../constants/theme';
 
 export default function BattleResultModal() {
   const battleReport   = useRavagerStore((s) => s.battleReport);
   const setBattleReport = useRavagerStore((s) => s.setBattleReport);
+
+  const { colors, isDark } = useTheme();
 
   if (!battleReport) return null;
 
@@ -39,7 +42,7 @@ export default function BattleResultModal() {
   return (
     <Modal transparent visible animationType="fade" onRequestClose={() => setBattleReport(null)}>
       <View style={styles.backdrop}>
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
           {/* Header */}
           <View style={[styles.header, victorious && styles.headerVictory]}>
             <Text style={styles.headerEmoji}>{victorious ? '🛡️' : '💀'}</Text>
@@ -51,20 +54,20 @@ export default function BattleResultModal() {
           <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
             {/* Ravager outcome */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Ravagers</Text>
-              <Row emoji="⚔️" label="Defeated" value={ravagersDefeated} color="#059669" />
-              <Row emoji="🏃" label="Escaped"  value={ravagersEscaped}  color={ravagersEscaped > 0 ? '#DC2626' : '#6B7280'} />
+              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Ravagers</Text>
+              <Row emoji="⚔️" label="Defeated" value={ravagersDefeated} color="#059669" labelColor={colors.text} />
+              <Row emoji="🏃" label="Escaped"  value={ravagersEscaped}  color={ravagersEscaped > 0 ? '#DC2626' : '#6B7280'} labelColor={colors.text} />
             </View>
 
             {/* Losses */}
             {(plantsDestroyed > 0 || creaturesLost > 0 || resourceRows.length > 0) && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Losses</Text>
+                <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Losses</Text>
                 {plantsDestroyed > 0 && (
-                  <Row emoji="🌿" label="Plants destroyed" value={plantsDestroyed} color="#DC2626" />
+                  <Row emoji="🌿" label="Plants destroyed" value={plantsDestroyed} color="#DC2626" labelColor={colors.text} />
                 )}
                 {creaturesLost > 0 && (
-                  <Row emoji="💔" label="Creatures lost"   value={creaturesLost}   color="#DC2626" />
+                  <Row emoji="💔" label="Creatures lost"   value={creaturesLost}   color="#DC2626" labelColor={colors.text} />
                 )}
                 {resourceRows.map(([id, amount]) => {
                   const def = RESOURCE_DISPLAY[id] ?? RESOURCE_DISPLAY_FALLBACK;
@@ -75,6 +78,7 @@ export default function BattleResultModal() {
                       label={`${def.label} stolen`}
                       value={amount}
                       color="#DC2626"
+                      labelColor={colors.text}
                     />
                   );
                 })}
@@ -86,7 +90,10 @@ export default function BattleResultModal() {
             )}
           </ScrollView>
 
-          <Pressable style={styles.closeBtn} onPress={() => setBattleReport(null)}>
+          <Pressable
+            style={[styles.closeBtn, isDark && { backgroundColor: '#374151' }]}
+            onPress={() => setBattleReport(null)}
+          >
             <Text style={styles.closeBtnText}>OK</Text>
           </Pressable>
         </View>
@@ -100,20 +107,14 @@ export default function BattleResultModal() {
 // ---------------------------------------------------------------------------
 
 function Row({
-  emoji,
-  label,
-  value,
-  color,
+  emoji, label, value, color, labelColor,
 }: {
-  emoji: string;
-  label: string;
-  value: number;
-  color: string;
+  emoji: string; label: string; value: number; color: string; labelColor: string;
 }) {
   return (
     <View style={styles.row}>
       <Text style={styles.rowEmoji}>{emoji}</Text>
-      <Text style={styles.rowLabel}>{label}</Text>
+      <Text style={[styles.rowLabel, { color: labelColor }]}>{label}</Text>
       <Text style={[styles.rowValue, { color }]}>{value}</Text>
     </View>
   );

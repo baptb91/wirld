@@ -11,7 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { theme } from '../../constants/theme';
+import { theme, useTheme } from '../../constants/theme';
 import { useResourceStore } from '../../store/resourceStore';
 import {
   RESOURCE_DISPLAY,
@@ -31,8 +31,12 @@ function formatAmount(n: number): string {
 
 export default function WarehousePanel({ visible, onClose }: WarehousePanelProps) {
   const { resources, gold } = useResourceStore();
+  const { colors, isDark } = useTheme();
 
   if (!visible) return null;
+
+  const panelBg = isDark ? 'rgba(28,28,30,0.97)' : 'rgba(245,240,232,0.97)';
+  const divider = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(80,60,20,0.10)';
 
   // Sort non-zero resources by value descending
   const rows = Object.entries(resources)
@@ -42,11 +46,11 @@ export default function WarehousePanel({ visible, onClose }: WarehousePanelProps
   return (
     <Pressable style={styles.backdrop} onPress={onClose}>
       {/* Prevent tap-through to backdrop when pressing inside panel */}
-      <View style={styles.panel} onStartShouldSetResponder={() => true}>
-        <View style={styles.header}>
-          <Text style={styles.title}>🏪  Warehouse</Text>
+      <View style={[styles.panel, { backgroundColor: panelBg }]} onStartShouldSetResponder={() => true}>
+        <View style={[styles.header, { borderBottomColor: divider }]}>
+          <Text style={[styles.title, { color: colors.text }]}>🏪  Warehouse</Text>
           <Pressable onPress={onClose} hitSlop={12}>
-            <Text style={styles.closeBtn}>✕</Text>
+            <Text style={[styles.closeBtn, { color: colors.textMuted }]}>✕</Text>
           </Pressable>
         </View>
 
@@ -61,10 +65,12 @@ export default function WarehousePanel({ visible, onClose }: WarehousePanelProps
             label="Gold"
             value={gold}
             color="#D4A017"
+            labelColor={colors.text}
+            dividerColor={divider}
           />
 
           {rows.length === 0 && (
-            <Text style={styles.emptyNote}>
+            <Text style={[styles.emptyNote, { color: colors.textMuted }]}>
               Creatures and plants will produce resources over time.
             </Text>
           )}
@@ -78,6 +84,8 @@ export default function WarehousePanel({ visible, onClose }: WarehousePanelProps
                 label={d.label}
                 value={value}
                 color={d.color}
+                labelColor={colors.text}
+                dividerColor={divider}
               />
             );
           })}
@@ -88,20 +96,15 @@ export default function WarehousePanel({ visible, onClose }: WarehousePanelProps
 }
 
 function ResourceRow({
-  emoji,
-  label,
-  value,
-  color,
+  emoji, label, value, color, labelColor, dividerColor,
 }: {
-  emoji: string;
-  label: string;
-  value: number;
-  color: string;
+  emoji: string; label: string; value: number; color: string;
+  labelColor: string; dividerColor: string;
 }) {
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, { borderBottomColor: dividerColor }]}>
       <Text style={styles.rowEmoji}>{emoji}</Text>
-      <Text style={styles.rowLabel}>{label}</Text>
+      <Text style={[styles.rowLabel, { color: labelColor }]}>{label}</Text>
       <Text style={[styles.rowValue, { color }]}>{formatAmount(value)}</Text>
     </View>
   );

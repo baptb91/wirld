@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../src/constants/theme';
+import { theme, useTheme } from '../../src/constants/theme';
 import { useSettingsStore } from '../../src/store/settingsStore';
 import { SoundService } from '../../src/services/SoundService';
 
@@ -40,10 +40,12 @@ export default function SettingsScreen() {
     if (v) SoundService.play('captureSuccess'); // quick preview
   }
 
+  const { colors } = useTheme();
+
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.surface }]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Settings</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Settings</Text>
 
         <Section label="Sound">
           <Row
@@ -94,10 +96,13 @@ export default function SettingsScreen() {
 }
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  const { colors } = useTheme();
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionLabel}>{label}</Text>
-      <View style={styles.sectionBody}>{children}</View>
+      <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>{label}</Text>
+      <View style={[styles.sectionBody, { backgroundColor: colors.sectionBody, borderColor: colors.border }]}>
+        {children}
+      </View>
     </View>
   );
 }
@@ -113,16 +118,17 @@ function Row({
   value: boolean;
   onToggle: (v: boolean) => void;
 }) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, { borderBottomColor: colors.border }]}>
       <View style={styles.rowText}>
-        <Text style={styles.rowLabel}>{label}</Text>
-        {hint ? <Text style={styles.rowHint}>{hint}</Text> : null}
+        <Text style={[styles.rowLabel, { color: colors.text }]}>{label}</Text>
+        {hint ? <Text style={[styles.rowHint, { color: colors.textMuted }]}>{hint}</Text> : null}
       </View>
       <Switch
         value={value}
         onValueChange={onToggle}
-        trackColor={{ false: theme.colors.border, true: theme.colors.green }}
+        trackColor={{ false: colors.border, true: colors.green }}
         thumbColor="#fff"
       />
     </View>
@@ -130,10 +136,11 @@ function Row({
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue}>{value}</Text>
+    <View style={[styles.row, { borderBottomColor: colors.border }]}>
+      <Text style={[styles.rowLabel, { color: colors.text }]}>{label}</Text>
+      <Text style={[styles.rowValue, { color: colors.textMuted }]}>{value}</Text>
     </View>
   );
 }

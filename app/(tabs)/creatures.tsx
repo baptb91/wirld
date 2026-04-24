@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../../src/constants/theme';
+import { theme, useTheme } from '../../src/constants/theme';
 import { useCreatureStore } from '../../src/store/creatureStore';
 import { useMapStore } from '../../src/store/mapStore';
 import { useResourceStore } from '../../src/store/resourceStore';
@@ -49,22 +49,24 @@ function OwnedCreatureCard({
   creature: OwnedCreature;
   onSell: (id: string) => void;
 }) {
+  const { colors, isDark } = useTheme();
   const def = SPECIES_MAP.get(creature.speciesId);
   if (!def) return null;
   const rarityColor = RARITY_COLOR[def.rarity] ?? '#888';
   const emoji = SPECIES_EMOJI[creature.speciesId] ?? '❓';
   const sellPrice = def.sellPrice * (creature.isShiny ? 5 : 1);
+  const cardBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.90)';
 
   return (
-    <View style={[styles.ownedCard, { borderColor: rarityColor }]}>
+    <View style={[styles.ownedCard, { borderColor: rarityColor, backgroundColor: cardBg }]}>
       <View style={[styles.rarityBadge, { backgroundColor: rarityColor }]}>
         <Text style={styles.rarityBadgeText}>{RARITY_SHORT[def.rarity]}</Text>
       </View>
       <Text style={styles.ownedEmoji}>{emoji}</Text>
-      <Text style={styles.ownedName} numberOfLines={1}>{creature.name}</Text>
-      <Text style={styles.ownedSpecies} numberOfLines={1}>{def.name}</Text>
+      <Text style={[styles.ownedName, { color: colors.text }]} numberOfLines={1}>{creature.name}</Text>
+      <Text style={[styles.ownedSpecies, { color: colors.textMuted }]} numberOfLines={1}>{def.name}</Text>
       <View style={styles.ownedStats}>
-        <Text style={styles.ownedStat}>❤️ {creature.happiness}</Text>
+        <Text style={[styles.ownedStat, { color: colors.textMuted }]}>❤️ {creature.happiness}</Text>
         {creature.isShiny && <Text style={styles.shinyTag}>✨</Text>}
       </View>
       <Pressable
@@ -78,16 +80,19 @@ function OwnedCreatureCard({
 }
 
 function CodexCard({ speciesId, discovered }: { speciesId: string; discovered: boolean }) {
+  const { colors, isDark } = useTheme();
   const def = SPECIES_MAP.get(speciesId);
   if (!def) return null;
   const rarityColor = RARITY_COLOR[def.rarity] ?? '#888';
   const emoji = SPECIES_EMOJI[speciesId] ?? '❓';
+  const codexBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(80,60,20,0.05)';
 
   return (
     <View style={[
       styles.codexCard,
+      { backgroundColor: codexBg },
       !discovered && styles.codexCardLocked,
-      { borderColor: discovered ? rarityColor : theme.colors.border },
+      { borderColor: discovered ? rarityColor : colors.border },
     ]}>
       <View style={[styles.rarityBadge, { backgroundColor: discovered ? rarityColor : '#aaa' }]}>
         <Text style={styles.rarityBadgeText}>{RARITY_SHORT[def.rarity]}</Text>
@@ -95,7 +100,7 @@ function CodexCard({ speciesId, discovered }: { speciesId: string; discovered: b
       <Text style={[styles.codexEmoji, !discovered && styles.lockedEmoji]}>
         {discovered ? emoji : '❓'}
       </Text>
-      <Text style={[styles.codexName, !discovered && styles.lockedText]} numberOfLines={1}>
+      <Text style={[styles.codexName, { color: colors.text }, !discovered && { color: colors.textMuted }]} numberOfLines={1}>
         {discovered ? def.name : '???'}
       </Text>
       <Text style={styles.codexSellHint}>💰{formatGold(def.sellPrice)}</Text>
@@ -112,6 +117,7 @@ type Section =
   | { title: string; type: 'codex'; data: ['codex'] };
 
 export default function CreaturesScreen() {
+  const { colors, isDark } = useTheme();
   const creatures           = useCreatureStore((s) => s.creatures);
   const removeCreature      = useCreatureStore((s) => s.removeCreature);
   const unassignFromHabitat = useMapStore((s) => s.unassignCreatureFromHabitat);
@@ -152,12 +158,15 @@ export default function CreaturesScreen() {
     { title: `Codex  ${discoveredSpeciesIds.size} / ${SPECIES.length} discovered`, type: 'codex', data: ['codex'] },
   ];
 
+  const goldChipBg   = isDark ? '#2A1A00'  : '#FFF8E1';
+  const goldTextColor = isDark ? '#F5C842' : '#B8860B';
+
   return (
-    <SafeAreaView style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Creatures</Text>
-        <View style={styles.goldChip}>
-          <Text style={styles.goldText}>💰 {formatGold(gold)}</Text>
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.surface }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <Text style={[styles.title, { color: colors.text }]}>Creatures</Text>
+        <View style={[styles.goldChip, { backgroundColor: goldChipBg, borderColor: colors.gold }]}>
+          <Text style={[styles.goldText, { color: goldTextColor }]}>💰 {formatGold(gold)}</Text>
         </View>
       </View>
 
@@ -166,13 +175,13 @@ export default function CreaturesScreen() {
         keyExtractor={(item, i) => item + i}
         stickySectionHeadersEnabled={false}
         renderSectionHeader={({ section }) => (
-          <Text style={styles.sectionTitle}>{section.title}</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{section.title}</Text>
         )}
         renderItem={({ section }) => {
           if (section.type === 'owned') {
             if (creatures.length === 0) {
               return (
-                <Text style={styles.emptyText}>
+                <Text style={[styles.emptyText, { color: colors.textMuted }]}>
                   No creatures yet. Explore your map to attract them!
                 </Text>
               );

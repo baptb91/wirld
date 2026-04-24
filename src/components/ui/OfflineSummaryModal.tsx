@@ -16,7 +16,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { theme } from '../../constants/theme';
+import { theme, useTheme } from '../../constants/theme';
 import { useResourceStore } from '../../store/resourceStore';
 import {
   RESOURCE_DISPLAY,
@@ -49,6 +49,7 @@ function formatAmount(n: number): string {
 export default function OfflineSummaryModal() {
   const summary             = useResourceStore((s) => s.pendingOfflineSummary);
   const clearSummary        = useResourceStore((s) => s.setPendingOfflineSummary);
+  const { colors }          = useTheme();
 
   const slideAnim = useRef(new Animated.Value(300)).current;
 
@@ -79,34 +80,34 @@ export default function OfflineSummaryModal() {
   return (
     <Pressable style={styles.backdrop} onPress={dismiss}>
       <Animated.View
-        style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}
+        style={[styles.sheet, { backgroundColor: colors.surface, transform: [{ translateY: slideAnim }] }]}
         // Prevent backdrop tap from firing when pressing inside the sheet
         onStartShouldSetResponder={() => true}
       >
         {/* Header */}
         <View style={styles.headerRow}>
-          <Text style={styles.title}>🌿  Welcome back!</Text>
+          <Text style={[styles.title, { color: colors.text }]}>🌿  Welcome back!</Text>
           <Pressable onPress={dismiss} hitSlop={14}>
-            <Text style={styles.closeBtn}>✕</Text>
+            <Text style={[styles.closeBtn, { color: colors.textMuted }]}>✕</Text>
           </Pressable>
         </View>
 
-        <Text style={styles.subtitle}>
+        <Text style={[styles.subtitle, { color: colors.textMuted }]}>
           Away for{' '}
-          <Text style={styles.subtitleBold}>
+          <Text style={[styles.subtitleBold, { color: colors.text }]}>
             {formatDuration(summary.elapsedSeconds)}
           </Text>
           {' '}— here's what your creatures produced:
         </Text>
 
         <ScrollView
-          style={styles.scroll}
+          style={[styles.scroll, { borderTopColor: colors.border }]}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
         >
           {/* Gold row (if any gold was earned) */}
           {goldEarned > 0 && (
-            <EarningRow emoji="💰" label="Gold" amount={goldEarned} color="#D4A017" />
+            <EarningRow emoji="💰" label="Gold" amount={goldEarned} color="#D4A017" labelColor={colors.text} dividerColor={colors.border} />
           )}
 
           {/* Resource rows */}
@@ -119,6 +120,8 @@ export default function OfflineSummaryModal() {
                 label={d.label}
                 amount={amount}
                 color={d.color}
+                labelColor={colors.text}
+                dividerColor={colors.border}
               />
             );
           })}
@@ -137,20 +140,15 @@ export default function OfflineSummaryModal() {
 }
 
 function EarningRow({
-  emoji,
-  label,
-  amount,
-  color,
+  emoji, label, amount, color, labelColor, dividerColor,
 }: {
-  emoji: string;
-  label: string;
-  amount: number;
-  color: string;
+  emoji: string; label: string; amount: number; color: string;
+  labelColor: string; dividerColor: string;
 }) {
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, { borderBottomColor: dividerColor }]}>
       <Text style={styles.rowEmoji}>{emoji}</Text>
-      <Text style={styles.rowLabel}>{label}</Text>
+      <Text style={[styles.rowLabel, { color: labelColor }]}>{label}</Text>
       <View style={[styles.amountPill, { borderColor: color }]}>
         <Text style={[styles.amountText, { color }]}>{formatAmount(amount)}</Text>
       </View>
