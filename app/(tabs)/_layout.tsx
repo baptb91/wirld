@@ -1,10 +1,13 @@
 import { Tabs } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
+import { useEffect } from 'react';
 import { theme } from '../../src/constants/theme';
 import { useGameLoop } from '../../src/hooks/useGameLoop';
 import { useCreatureAI } from '../../src/hooks/useCreatureAI';
 import { useBreedingEngine } from '../../src/hooks/useBreedingEngine';
 import OfflineSummaryModal from '../../src/components/ui/OfflineSummaryModal';
+import { SoundService } from '../../src/services/SoundService';
+import { useSettingsStore } from '../../src/store/settingsStore';
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return (
@@ -19,6 +22,21 @@ export default function TabLayout() {
   useGameLoop();
   useCreatureAI();
   useBreedingEngine();
+
+  const ambientEnabled = useSettingsStore((s) => s.ambientEnabled);
+
+  useEffect(() => {
+    useSettingsStore.getState().loadSettings();
+    SoundService.init();
+  }, []);
+
+  useEffect(() => {
+    if (ambientEnabled) {
+      SoundService.startAmbient();
+    } else {
+      SoundService.stopAmbient();
+    }
+  }, [ambientEnabled]);
 
   return (
     <View style={styles.root}>

@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text } from 'react-native';
 import { useRavagerStore } from '../../store/ravagerStore';
 import { WARNING_BEFORE_MS } from '../../engine/RavagerEngine';
+import { SoundService } from '../../services/SoundService';
 
 export default function RavagerAlert() {
   const nextAttackAt = useRavagerStore((s) => s.nextAttackAt);
@@ -25,6 +26,15 @@ export default function RavagerAlert() {
   }, [nextAttackAt]);
 
   const visible = !waveActive && timeLeft > 0 && timeLeft <= WARNING_BEFORE_MS;
+
+  // Play warning sound once when the alert first becomes visible
+  const prevVisibleRef = useRef(false);
+  useEffect(() => {
+    if (visible && !prevVisibleRef.current) {
+      SoundService.play('ravagerWarning');
+    }
+    prevVisibleRef.current = visible;
+  }, [visible]);
 
   // Pulsing opacity
   useEffect(() => {

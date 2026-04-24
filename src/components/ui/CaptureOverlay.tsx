@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useCreatureStore, Creature } from '../../store/creatureStore';
 import { useResourceStore } from '../../store/resourceStore';
+import { SoundService } from '../../services/SoundService';
 import { SPECIES_MAP, RARITY_COLOR } from '../../constants/creatures';
 import {
   RESOURCE_DISPLAY,
@@ -144,6 +145,7 @@ export default function CaptureOverlay({ creature, onClose }: Props) {
   const doCapture = useCallback(() => {
     if (!creature || !def) return;
     setPhase('success');
+    SoundService.play('captureSuccess');
     const xp = XP_FOR_RARITY[def.rarity] ?? 10;
     useCreatureStore.getState().updateCreature(creature.id, { wildExpiresAt: null });
     useResourceStore.getState().addXP(xp);

@@ -70,6 +70,7 @@ import BreedingPanel from '../ui/BreedingPanel';
 import HybridBreedingPanel from '../ui/HybridBreedingPanel';
 import MiniMap from './MiniMap';
 import { interpolateRavagerPos } from '../../engine/RavagerEngine';
+import { SoundService } from '../../services/SoundService';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -159,10 +160,17 @@ export default function MapCanvas() {
   const habitatOpenProgress = useSharedValue(
     (period === 'dawn' || period === 'day') ? 1 : 0,
   );
+  const prevPeriodRef = useRef<typeof period | null>(null);
 
   useEffect(() => {
-    const target = (period === 'dawn' || period === 'day') ? 1 : 0;
+    const isDaytime = period === 'dawn' || period === 'day';
+    const target = isDaytime ? 1 : 0;
     habitatOpenProgress.value = withTiming(target, { duration: 25_000 });
+    // Play door sound on transition (skip the initial mount render)
+    if (prevPeriodRef.current !== null && prevPeriodRef.current !== period) {
+      SoundService.play(isDaytime ? 'doorOpen' : 'doorClose');
+    }
+    prevPeriodRef.current = period;
   }, [period]);
 
   // ── Camera shared values ─────────────────────────────────────────────────
@@ -401,6 +409,11 @@ export default function MapCanvas() {
             setHungerTarget(c);
             return;
           }
+          const creatureType = SPECIES_MAP.get(c.speciesId)?.type;
+          const tapKey =
+            creatureType === 'carnivore' ? 'tapCarnivore' :
+            creatureType === 'aquatic'   ? 'tapAquatic'   : 'tapHerbivore';
+          SoundService.play(tapKey);
           if (c.state === 'sleeping' || c.state === 'stumbling') {
             wakeCreature(c.id);
           } else if (c.state === 'active') {

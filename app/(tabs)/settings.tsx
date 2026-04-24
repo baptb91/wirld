@@ -1,9 +1,8 @@
 /**
- * Settings Screen — Phase 1 placeholder.
- * Sound, haptics toggles + version info.
- * Full IAP / Supabase integration comes in Phase 6.
+ * Settings Screen — Phase 6.
+ * Sound, haptics, notifications + about info.
  */
-import React, { useState } from 'react';
+import React from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -13,30 +12,74 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../src/constants/theme';
+import { useSettingsStore } from '../../src/store/settingsStore';
+import { SoundService } from '../../src/services/SoundService';
 
 export default function SettingsScreen() {
-  const [soundEnabled,   setSoundEnabled]   = useState(true);
-  const [hapticsEnabled, setHapticsEnabled] = useState(true);
-  const [notifEnabled,   setNotifEnabled]   = useState(true);
+  const sfxEnabled      = useSettingsStore((s) => s.sfxEnabled);
+  const ambientEnabled  = useSettingsStore((s) => s.ambientEnabled);
+  const hapticsEnabled  = useSettingsStore((s) => s.hapticsEnabled);
+  const notifEnabled    = useSettingsStore((s) => s.notifEnabled);
+
+  const setSfxEnabled     = useSettingsStore((s) => s.setSfxEnabled);
+  const setAmbientEnabled = useSettingsStore((s) => s.setAmbientEnabled);
+  const setHapticsEnabled = useSettingsStore((s) => s.setHapticsEnabled);
+  const setNotifEnabled   = useSettingsStore((s) => s.setNotifEnabled);
+
+  function handleAmbientToggle(v: boolean) {
+    setAmbientEnabled(v);
+    if (v) {
+      SoundService.startAmbient();
+    } else {
+      SoundService.stopAmbient();
+    }
+  }
+
+  function handleSfxToggle(v: boolean) {
+    setSfxEnabled(v);
+    if (v) SoundService.play('captureSuccess'); // quick preview
+  }
 
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Settings</Text>
 
-        <Section label="Audio & Feel">
-          <Row label="Sound" value={soundEnabled}   onToggle={setSoundEnabled} />
-          <Row label="Haptics" value={hapticsEnabled} onToggle={setHapticsEnabled} />
+        <Section label="Sound">
+          <Row
+            label="Sound effects"
+            hint="Tap, capture, battle sounds"
+            value={sfxEnabled}
+            onToggle={handleSfxToggle}
+          />
+          <Row
+            label="Ambient nature loop"
+            hint="Birds & wind (off by default)"
+            value={ambientEnabled}
+            onToggle={handleAmbientToggle}
+          />
+        </Section>
+
+        <Section label="Feel">
+          <Row
+            label="Haptics"
+            value={hapticsEnabled}
+            onToggle={setHapticsEnabled}
+          />
         </Section>
 
         <Section label="Notifications">
-          <Row label="All notifications" value={notifEnabled} onToggle={setNotifEnabled} />
+          <Row
+            label="All notifications"
+            value={notifEnabled}
+            onToggle={setNotifEnabled}
+          />
         </Section>
 
         <Section label="About">
-          <InfoRow label="Version"    value="1.0.0 (Phase 1)" />
-          <InfoRow label="Build"      value="Development" />
-          <InfoRow label="Engine"     value="Expo SDK 54 · Skia · Reanimated 3" />
+          <InfoRow label="Version"  value="1.0.0 (Phase 6)" />
+          <InfoRow label="Build"    value="Development" />
+          <InfoRow label="Engine"   value="Expo SDK 54 · Skia · Reanimated 4" />
         </Section>
 
         <View style={styles.footer}>
@@ -61,16 +104,21 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 function Row({
   label,
+  hint,
   value,
   onToggle,
 }: {
   label: string;
+  hint?: string;
   value: boolean;
   onToggle: (v: boolean) => void;
 }) {
   return (
     <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
+      <View style={styles.rowText}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        {hint ? <Text style={styles.rowHint}>{hint}</Text> : null}
+      </View>
       <Switch
         value={value}
         onValueChange={onToggle}
@@ -130,14 +178,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
+  rowText: { flex: 1, marginRight: 12, gap: 2 },
   rowLabel: {
     fontFamily: theme.fonts.body,
     fontSize: 15,
     color: theme.colors.text,
+  },
+  rowHint: {
+    fontFamily: theme.fonts.body,
+    fontSize: 11,
+    color: theme.colors.textMuted,
   },
   rowValue: {
     fontFamily: theme.fonts.mono,
