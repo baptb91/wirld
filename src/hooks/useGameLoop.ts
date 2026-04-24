@@ -21,6 +21,7 @@ import { useCreatureStore } from '../store/creatureStore';
 import { useMapStore } from '../store/mapStore';
 import { useResourceStore } from '../store/resourceStore';
 import { usePlantStore } from '../store/plantStore';
+import { useAdStore, PRODUCTION_BOOST_MULTIPLIER } from '../store/adStore';
 import { SPECIES_MAP } from '../constants/creatures';
 import { HABITAT_MAP } from '../constants/habitats';
 import { AUTO_WATER_AMOUNT, AUTO_WATER_RANGE_TILES } from '../constants/plants';
@@ -166,6 +167,9 @@ function runProductionTick(now: number): void {
     let mult = productionMultiplier(creature.happiness);
 
     if (creature.isShiny) mult *= 2;
+
+    const { productionBoostExpiresAt } = useAdStore.getState();
+    if (productionBoostExpiresAt > now) mult *= PRODUCTION_BOOST_MULTIPLIER;
 
     if (creature.habitatId) {
       const habitat    = habitats.find((h) => h.id === creature.habitatId);

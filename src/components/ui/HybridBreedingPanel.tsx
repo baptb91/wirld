@@ -26,6 +26,8 @@ import {
   hybridGestationMs,
   HYBRID_RECIPES,
 } from '../../engine/HybridBreedingEngine';
+import { useAdStore, GESTATION_SPEEDUP_MS } from '../../store/adStore';
+import { AdService } from '../../services/AdService';
 
 interface Props {
   buildingId: string;
@@ -45,6 +47,11 @@ function formatDuration(ms: number): string {
 export default function HybridBreedingPanel({ buildingId, firstCreatureId, onClose }: Props) {
   const [now, setNow] = useState(() => Date.now());
   const [selectedSecondId, setSelectedSecondId] = useState<string | null>(null);
+  const [adLoading, setAdLoading] = useState(false);
+
+  const isPremium       = useAdStore((s) => s.isPremium);
+  const isSpeedUpUsed   = useAdStore((s) => s.isGestationSpeedUpUsed);
+  const markSpeedUpUsed = useAdStore((s) => s.markGestationSpeedUpUsed);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 10_000);
@@ -106,6 +113,24 @@ export default function HybridBreedingPanel({ buildingId, firstCreatureId, onClo
     const parentA    = creatures.find((c) => c.id === building.hybridParentIds?.[0]);
     const parentB    = creatures.find((c) => c.id === building.hybridParentIds?.[1]);
 
+    const speedUpKey  = `${buildingId}:${building.hybridGestationEndsAt}`;
+    const speedUpUsed = isSpeedUpUsed(speedUpKey);
+    const canSpeedUp  = !isPremium && !speedUpUsed && remaining > GESTATION_SPEEDUP_MS;
+
+    async function handleSpeedUp() {
+      if (!canSpeedUp || adLoading || !building) return;
+      setAdLoading(true);
+      const earned = await AdService.showRewarded();
+      setAdLoading(false);
+      if (earned) {
+        updateBuilding(buildingId, {
+          hybridGestationEndsAt: (building.hybridGestationEndsAt ?? 0) - GESTATION_SPEEDUP_MS,
+        });
+        markSpeedUpUsed(speedUpKey);
+        setNow(Date.now());
+      }
+    }
+
     return (
       <Modal transparent visible animationType="fade" onRequestClose={onClose}>
         <Pressable style={styles.backdrop} onPress={onClose}>
@@ -139,6 +164,18 @@ export default function HybridBreedingPanel({ buildingId, firstCreatureId, onClo
                 </View>
               )}
             </View>
+
+            {canSpeedUp && (
+              <Pressable
+                style={({ pressed }) => [styles.speedUpBtn, pressed && { opacity: 0.75 }]}
+                onPress={handleSpeedUp}
+                disabled={adLoading}
+              >
+                <Text style={styles.speedUpBtnText}>
+                  {adLoading ? 'Loading ad…' : '▶ Watch ad for −1h'}
+                </Text>
+              </Pressable>
+            )}
 
             <Pressable style={styles.closeBtn} onPress={onClose}>
               <Text style={styles.closeBtnText}>Close</Text>
@@ -513,6 +550,19 @@ const styles = StyleSheet.create({
   backBtn: { alignItems: 'center', paddingVertical: 6 },
   backBtnText: { color: '#888', fontSize: 13 },
 
+  speedUpBtn: {
+    marginHorizontal: 14,
+    marginBottom:     8,
+    backgroundColor:  '#6D28D9',
+    borderRadius:     12,
+    paddingVertical:  10,
+    alignItems:       'center',
+  },
+  speedUpBtnText: {
+    color:      '#fff',
+    fontWeight: '800',
+    fontSize:   13,
+  },
   closeBtn: {
     margin:          14,
     backgroundColor: '#1F2937',

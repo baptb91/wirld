@@ -8,6 +8,7 @@ import { useBreedingEngine } from '../../src/hooks/useBreedingEngine';
 import OfflineSummaryModal from '../../src/components/ui/OfflineSummaryModal';
 import { SoundService } from '../../src/services/SoundService';
 import { useSettingsStore } from '../../src/store/settingsStore';
+import { useAdStore } from '../../src/store/adStore';
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return (
@@ -28,6 +29,7 @@ export default function TabLayout() {
 
   useEffect(() => {
     useSettingsStore.getState().loadSettings();
+    useAdStore.getState().loadAdState();
     SoundService.init();
   }, []);
 

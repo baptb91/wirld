@@ -20,6 +20,8 @@ import { useMapStore, HabitatPlacement } from '../../store/mapStore';
 import { SPECIES_MAP, RARITY_COLOR } from '../../constants/creatures';
 import { HABITAT_MAP } from '../../constants/habitats';
 import { findBreedPair, GESTATION_MS } from '../../engine/BreedingEngine';
+import { useAdStore, GESTATION_SPEEDUP_MS } from '../../store/adStore';
+import { AdService } from '../../services/AdService';
 
 interface Props {
   habitatId: string;
@@ -36,12 +38,16 @@ function formatDuration(ms: number): string {
 
 export default function BreedingPanel({ habitatId, onClose }: Props) {
   const [now, setNow] = useState(() => Date.now());
+  const [adLoading, setAdLoading] = useState(false);
 
-  // Refresh timer every 10 s while panel is open
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 10_000);
     return () => clearInterval(id);
   }, []);
+
+  const isPremium             = useAdStore((s) => s.isPremium);
+  const isSpeedUpUsed         = useAdStore((s) => s.isGestationSpeedUpUsed);
+  const markSpeedUpUsed       = useAdStore((s) => s.markGestationSpeedUpUsed);
 
   const creatures   = useCreatureStore((s) => s.creatures);
   const habitat     = useMapStore((s) => s.habitats.find((h) => h.id === habitatId));
@@ -74,6 +80,24 @@ export default function BreedingPanel({ habitatId, onClose }: Props) {
     const remaining  = (habitat.gestationEndsAt ?? 0) - now;
     const rarity     = speciesDef?.rarity ?? 'common';
 
+    const speedUpKey  = `${habitatId}:${habitat.gestationEndsAt}`;
+    const speedUpUsed = isSpeedUpUsed(speedUpKey);
+    const canSpeedUp  = !isPremium && !speedUpUsed && remaining > GESTATION_SPEEDUP_MS;
+
+    async function handleSpeedUp() {
+      if (!canSpeedUp || adLoading || !habitat) return;
+      setAdLoading(true);
+      const earned = await AdService.showRewarded();
+      setAdLoading(false);
+      if (earned) {
+        updateHabitat(habitatId, {
+          gestationEndsAt: (habitat.gestationEndsAt ?? 0) - GESTATION_SPEEDUP_MS,
+        });
+        markSpeedUpUsed(speedUpKey);
+        setNow(Date.now());
+      }
+    }
+
     return (
       <Modal transparent visible animationType="fade" onRequestClose={onClose}>
         <Pressable style={styles.backdrop} onPress={onClose}>
@@ -105,6 +129,18 @@ export default function BreedingPanel({ habitatId, onClose }: Props) {
                 </Text>
               )}
             </View>
+
+            {canSpeedUp && (
+              <Pressable
+                style={({ pressed }) => [styles.speedUpBtn, pressed && { opacity: 0.75 }]}
+                onPress={handleSpeedUp}
+                disabled={adLoading}
+              >
+                <Text style={styles.speedUpBtnText}>
+                  {adLoading ? 'Loading ad…' : '▶ Watch ad for −1h'}
+                </Text>
+              </Pressable>
+            )}
 
             <Pressable style={styles.closeBtn} onPress={onClose}>
               <Text style={styles.closeBtnText}>Close</Text>
@@ -391,6 +427,19 @@ const styles = StyleSheet.create({
   checkOk: { color: '#34D399', fontSize: 11, fontWeight: '700' },
   checkNo: { color: '#EF4444', fontSize: 11, fontWeight: '700' },
 
+  speedUpBtn: {
+    marginHorizontal: 14,
+    marginBottom:     8,
+    backgroundColor:  '#6D28D9',
+    borderRadius:     12,
+    paddingVertical:  10,
+    alignItems:       'center',
+  },
+  speedUpBtnText: {
+    color:      '#fff',
+    fontWeight: '800',
+    fontSize:   13,
+  },
   closeBtn: {
     margin:          14,
     backgroundColor: '#1F2937',
