@@ -12,6 +12,7 @@ import { createBabyCreature } from '../engine/BreedingEngine';
 import { createHybridBaby } from '../engine/HybridBreedingEngine';
 import { HABITAT_MAP } from '../constants/habitats';
 import { SoundService } from '../services/SoundService';
+import { HapticsService } from '../services/HapticsService';
 
 const CHECK_INTERVAL_MS = 60_000;
 
@@ -44,6 +45,7 @@ export function useBreedingEngine(): void {
       const babyId = `baby-${parent.speciesId}-${now}`;
       addCreature({ ...createBabyCreature(parent), id: babyId });
       SoundService.play('breedingComplete');
+      HapticsService.success();
 
       const def = HABITAT_MAP.get(h.habitatTypeId);
       if (def && h.assignedCreatureIds.length < def.capacity) {
@@ -71,6 +73,7 @@ export function useBreedingEngine(): void {
       const hybridId = `hybrid-${b.hybridSpeciesId}-${now}`;
       addCreature({ ...createHybridBaby(b.hybridSpeciesId, parentA), id: hybridId });
       SoundService.play('breedingComplete');
+      HapticsService.success();
       clearHybrid();
     }
   };

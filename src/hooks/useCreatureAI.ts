@@ -26,6 +26,7 @@ import {
   WALK_SPEED_PX_PER_MS,
 } from '../engine/CreatureAI';
 import { interpolateRavagerPos } from '../engine/RavagerEngine';
+import { HapticsService } from '../services/HapticsService';
 
 const COMBAT_RANGE_PX  = 5 * TILE_SIZE;
 const COMBAT_RANGE_SQ  = COMBAT_RANGE_PX ** 2;
@@ -129,6 +130,7 @@ export function useCreatureAI(): void {
             // Melee damage when close enough
             if (dSq < MELEE_RANGE_SQ) {
               useRavagerStore.getState().damageRavager(target.id, 1);
+              HapticsService.heavy();
             }
 
             // Always walk toward target, bypassing nextMoveAt

@@ -71,6 +71,7 @@ import HybridBreedingPanel from '../ui/HybridBreedingPanel';
 import MiniMap from './MiniMap';
 import { interpolateRavagerPos } from '../../engine/RavagerEngine';
 import { SoundService } from '../../services/SoundService';
+import { HapticsService } from '../../services/HapticsService';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -278,6 +279,7 @@ export default function MapCanvas() {
       const last = lastPaintedTile.current;
       if (last && last.x === tileX && last.y === tileY) return;
       lastPaintedTile.current = { x: tileX, y: tileY };
+      HapticsService.light();
       paintTile(tileX, tileY, selectedTool);
     },
     [selectedTool, paintTile, translateX, scale],
@@ -303,6 +305,7 @@ export default function MapCanvas() {
       const tileX    = Math.max(0, tapTileX - half);
       const tileY    = Math.max(0, tapTileY - half);
 
+      HapticsService.medium();
       placeHabitat({
         id: `habitat-${Date.now()}`,
         habitatTypeId: selectedHabitat,
@@ -414,6 +417,7 @@ export default function MapCanvas() {
             creatureType === 'carnivore' ? 'tapCarnivore' :
             creatureType === 'aquatic'   ? 'tapAquatic'   : 'tapHerbivore';
           SoundService.play(tapKey);
+          HapticsService.light();
           if (c.state === 'sleeping' || c.state === 'stumbling') {
             wakeCreature(c.id);
           } else if (c.state === 'active') {

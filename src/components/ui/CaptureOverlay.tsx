@@ -10,6 +10,7 @@ import {
 import { useCreatureStore, Creature } from '../../store/creatureStore';
 import { useResourceStore } from '../../store/resourceStore';
 import { SoundService } from '../../services/SoundService';
+import { HapticsService } from '../../services/HapticsService';
 import { SPECIES_MAP, RARITY_COLOR } from '../../constants/creatures';
 import {
   RESOURCE_DISPLAY,
@@ -146,6 +147,11 @@ export default function CaptureOverlay({ creature, onClose }: Props) {
     if (!creature || !def) return;
     setPhase('success');
     SoundService.play('captureSuccess');
+    if (creature.isShiny) {
+      HapticsService.success();
+    } else {
+      HapticsService.medium();
+    }
     const xp = XP_FOR_RARITY[def.rarity] ?? 10;
     useCreatureStore.getState().updateCreature(creature.id, { wildExpiresAt: null });
     useResourceStore.getState().addXP(xp);

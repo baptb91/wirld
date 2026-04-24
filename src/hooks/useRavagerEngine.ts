@@ -50,6 +50,7 @@ import {
   type Ravager,
 } from '../engine/RavagerEngine';
 import { notifyRavagerWarning } from '../services/NotificationService';
+import { HapticsService } from '../services/HapticsService';
 
 const FIRST_LAUNCH_KEY   = '@wilds/firstLaunchAt';
 const NEXT_RAVAGER_KEY   = '@wilds/nextRavagerAt';
@@ -149,6 +150,7 @@ export function useRavagerEngine(): void {
         if (habDef?.sleepBonus.ravagerImmunity) return;
       }
       useCreatureStore.getState().removeCreature(r.targetId);
+      HapticsService.heavy();
       creaturesLostRef.current++;
     }
   }
