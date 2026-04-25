@@ -6,10 +6,12 @@ import {
 import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { Animated, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet } from 'react-native';
+import { useSettingsStore } from '../src/store/settingsStore';
+import OnboardingScreen from '../src/components/ui/OnboardingScreen';
 
 // Keep the splash screen up while fonts are loading
 SplashScreen.preventAutoHideAsync();
@@ -22,22 +24,42 @@ export default function RootLayout() {
     SpaceMono_400Regular,
   });
 
+  const fadeAnim            = useRef(new Animated.Value(0)).current;
+  const settingsLoaded      = useSettingsStore((s) => s.loaded);
+  const onboardingCompleted = useSettingsStore((s) => s.onboardingCompleted);
+
+  // Load settings early so we know onboarding state before first render
+  useEffect(() => {
+    useSettingsStore.getState().loadSettings();
+  }, []);
+
+  // Hide native splash once fonts ready, then fade the app in
   useEffect(() => {
     if (fontsLoaded || fontError) {
       SplashScreen.hideAsync();
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
     }
   }, [fontsLoaded, fontError]);
 
-  // Don't render until fonts are ready (avoids FOUT)
-  if (!fontsLoaded && !fontError) return null;
+  // Hold render until fonts and persisted settings are ready
+  if ((!fontsLoaded && !fontError) || !settingsLoaded) return null;
 
   return (
     <GestureHandlerRootView style={styles.root}>
       <StatusBar style="dark" />
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
+      <Animated.View style={[styles.root, { opacity: fadeAnim }]}>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="+not-found" />
+        </Stack>
+      </Animated.View>
+
+      {/* Full-screen onboarding shown on first launch */}
+      {!onboardingCompleted && <OnboardingScreen />}
     </GestureHandlerRootView>
   );
 }

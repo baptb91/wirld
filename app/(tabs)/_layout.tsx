@@ -31,7 +31,7 @@ export default function TabLayout() {
   const { colors } = useTheme();
 
   useEffect(() => {
-    useSettingsStore.getState().loadSettings();
+    // loadSettings() is called in the root layout before this mounts
     useAdStore.getState().loadAdState();
     usePurchaseStore.getState().initFirstInstall();
     SoundService.init();

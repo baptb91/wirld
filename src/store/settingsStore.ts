@@ -10,15 +10,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const KEY = '@wilds/settings';
 
 interface SettingsState {
-  sfxEnabled:      boolean;
+  sfxEnabled:           boolean;
   /** Ambient nature loop — off by default per spec */
-  ambientEnabled:  boolean;
-  sfxVolume:       number; // 0–1
-  ambientVolume:   number; // 0–1 (very quiet: 0.12)
-  hapticsEnabled:  boolean;
-  notifEnabled:    boolean;
+  ambientEnabled:       boolean;
+  sfxVolume:            number; // 0–1
+  ambientVolume:        number; // 0–1 (very quiet: 0.12)
+  hapticsEnabled:       boolean;
+  notifEnabled:         boolean;
+  onboardingCompleted:  boolean;
   /** True once AsyncStorage has been read */
-  loaded:          boolean;
+  loaded:               boolean;
 }
 
 interface SettingsActions {
@@ -28,6 +29,7 @@ interface SettingsActions {
   setAmbientVolume(v: number): void;
   setHapticsEnabled(v: boolean): void;
   setNotifEnabled(v: boolean): void;
+  completeOnboarding(): void;
   /** Call once at app start to hydrate from AsyncStorage */
   loadSettings(): Promise<void>;
 }
@@ -35,12 +37,13 @@ interface SettingsActions {
 type PersistedSettings = Omit<SettingsState, 'loaded'>;
 
 const DEFAULTS: PersistedSettings = {
-  sfxEnabled:     true,
-  ambientEnabled: false,
-  sfxVolume:      0.60,
-  ambientVolume:  0.12,
-  hapticsEnabled: true,
-  notifEnabled:   true,
+  sfxEnabled:          true,
+  ambientEnabled:      false,
+  sfxVolume:           0.60,
+  ambientVolume:       0.12,
+  hapticsEnabled:      true,
+  notifEnabled:        true,
+  onboardingCompleted: false,
 };
 
 async function persist(partial: Partial<PersistedSettings>): Promise<void> {
@@ -80,6 +83,11 @@ export const useSettingsStore = create<SettingsState & SettingsActions>((set, ge
   setNotifEnabled: (v) => {
     set({ notifEnabled: v });
     persist({ notifEnabled: v });
+  },
+
+  completeOnboarding: () => {
+    set({ onboardingCompleted: true });
+    persist({ onboardingCompleted: true });
   },
 
   loadSettings: async () => {
