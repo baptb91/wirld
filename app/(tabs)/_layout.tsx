@@ -7,8 +7,10 @@ import { useCreatureAI } from '../../src/hooks/useCreatureAI';
 import { useBreedingEngine } from '../../src/hooks/useBreedingEngine';
 import OfflineSummaryModal from '../../src/components/ui/OfflineSummaryModal';
 import { SoundService } from '../../src/services/SoundService';
+import { PurchaseService } from '../../src/services/PurchaseService';
 import { useSettingsStore } from '../../src/store/settingsStore';
 import { useAdStore } from '../../src/store/adStore';
+import { usePurchaseStore } from '../../src/store/purchaseStore';
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return (
@@ -30,7 +32,9 @@ export default function TabLayout() {
   useEffect(() => {
     useSettingsStore.getState().loadSettings();
     useAdStore.getState().loadAdState();
+    usePurchaseStore.getState().initFirstInstall();
     SoundService.init();
+    PurchaseService.init();
   }, []);
 
   useEffect(() => {

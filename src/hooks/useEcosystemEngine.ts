@@ -26,6 +26,7 @@ import {
   notifyWildCreature,
   notifyShinyCreature,
 } from '../services/NotificationService';
+import { usePurchaseStore } from '../store/purchaseStore';
 
 export function useEcosystemEngine(): void {
   useEffect(() => {
@@ -34,8 +35,9 @@ export function useEcosystemEngine(): void {
       const { terrainGrid, unlockedCols, unlockedRows } = useMapStore.getState();
       const { creatures, maxCreatures, addCreature }    = useCreatureStore.getState();
 
-      // Respect the creature cap
-      if (creatures.length >= maxCreatures) return;
+      // Respect the creature cap (premium pass grants +1 slot)
+      const { extraCreatureSlots } = usePurchaseStore.getState();
+      if (creatures.length >= maxCreatures + extraCreatureSlots) return;
       // Need at least a minimal unlocked area
       if (unlockedCols < 4 || unlockedRows < 4) return;
 

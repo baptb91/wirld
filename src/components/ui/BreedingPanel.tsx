@@ -21,6 +21,7 @@ import { SPECIES_MAP, RARITY_COLOR } from '../../constants/creatures';
 import { HABITAT_MAP } from '../../constants/habitats';
 import { findBreedPair, GESTATION_MS } from '../../engine/BreedingEngine';
 import { useAdStore, GESTATION_SPEEDUP_MS } from '../../store/adStore';
+import { usePurchaseStore } from '../../store/purchaseStore';
 import { AdService } from '../../services/AdService';
 
 interface Props {
@@ -45,7 +46,7 @@ export default function BreedingPanel({ habitatId, onClose }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  const isPremium             = useAdStore((s) => s.isPremium);
+  const isAdFree              = usePurchaseStore((s) => s.isAdFree);
   const isSpeedUpUsed         = useAdStore((s) => s.isGestationSpeedUpUsed);
   const markSpeedUpUsed       = useAdStore((s) => s.markGestationSpeedUpUsed);
 
@@ -82,7 +83,7 @@ export default function BreedingPanel({ habitatId, onClose }: Props) {
 
     const speedUpKey  = `${habitatId}:${habitat.gestationEndsAt}`;
     const speedUpUsed = isSpeedUpUsed(speedUpKey);
-    const canSpeedUp  = !isPremium && !speedUpUsed && remaining > GESTATION_SPEEDUP_MS;
+    const canSpeedUp  = !isAdFree && !speedUpUsed && remaining > GESTATION_SPEEDUP_MS;
 
     async function handleSpeedUp() {
       if (!canSpeedUp || adLoading || !habitat) return;

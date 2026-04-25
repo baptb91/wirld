@@ -2,8 +2,10 @@
  * Settings Screen — Phase 6.
  * Sound, haptics, notifications + about info.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  ActivityIndicator,
+  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -14,6 +16,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme, useTheme } from '../../src/constants/theme';
 import { useSettingsStore } from '../../src/store/settingsStore';
 import { SoundService } from '../../src/services/SoundService';
+import { PurchaseService } from '../../src/services/PurchaseService';
+import { usePurchaseStore } from '../../src/store/purchaseStore';
+import ShopPanel from '../../src/components/ui/ShopPanel';
 
 export default function SettingsScreen() {
   const sfxEnabled      = useSettingsStore((s) => s.sfxEnabled);
@@ -25,6 +30,11 @@ export default function SettingsScreen() {
   const setAmbientEnabled = useSettingsStore((s) => s.setAmbientEnabled);
   const setHapticsEnabled = useSettingsStore((s) => s.setHapticsEnabled);
   const setNotifEnabled   = useSettingsStore((s) => s.setNotifEnabled);
+
+  const isAdFree      = usePurchaseStore((s) => s.isAdFree);
+  const isPremiumPass = usePurchaseStore((s) => s.isPremiumPass);
+  const [shopOpen, setShopOpen]     = useState(false);
+  const [restoring, setRestoring]   = useState(false);
 
   function handleAmbientToggle(v: boolean) {
     setAmbientEnabled(v);
@@ -38,6 +48,13 @@ export default function SettingsScreen() {
   function handleSfxToggle(v: boolean) {
     setSfxEnabled(v);
     if (v) SoundService.play('captureSuccess'); // quick preview
+  }
+
+  async function handleRestore() {
+    if (restoring) return;
+    setRestoring(true);
+    await PurchaseService.restore();
+    setRestoring(false);
   }
 
   const { colors } = useTheme();
@@ -78,6 +95,27 @@ export default function SettingsScreen() {
           />
         </Section>
 
+        <Section label="Purchases">
+          <ActionRow
+            label={isPremiumPass ? '⚡ Wilds Pass — Active' : '🛒 Shop'}
+            hint={
+              isPremiumPass
+                ? 'No ads · ×1.2 production · +1 creature slot'
+                : isAdFree
+                ? 'Ads removed'
+                : '5 products available'
+            }
+            onPress={() => setShopOpen(true)}
+          />
+          <ActionRow
+            label={restoring ? 'Restoring…' : 'Restore Purchases'}
+            hint="Recover previous non-consumable purchases"
+            onPress={handleRestore}
+            disabled={restoring}
+            trailing={restoring ? <ActivityIndicator size="small" color={colors.textMuted} /> : undefined}
+          />
+        </Section>
+
         <Section label="About">
           <InfoRow label="Version"  value="1.0.0 (Phase 6)" />
           <InfoRow label="Build"    value="Development" />
@@ -91,6 +129,8 @@ export default function SettingsScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {shopOpen && <ShopPanel onClose={() => setShopOpen(false)} />}
     </SafeAreaView>
   );
 }
@@ -142,6 +182,39 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <Text style={[styles.rowLabel, { color: colors.text }]}>{label}</Text>
       <Text style={[styles.rowValue, { color: colors.textMuted }]}>{value}</Text>
     </View>
+  );
+}
+
+function ActionRow({
+  label,
+  hint,
+  onPress,
+  disabled,
+  trailing,
+}: {
+  label:     string;
+  hint?:     string;
+  onPress:   () => void;
+  disabled?: boolean;
+  trailing?: React.ReactNode;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.row,
+        { borderBottomColor: colors.border },
+        pressed && !disabled && { opacity: 0.6 },
+      ]}
+    >
+      <View style={styles.rowText}>
+        <Text style={[styles.rowLabel, { color: colors.text }]}>{label}</Text>
+        {hint ? <Text style={[styles.rowHint, { color: colors.textMuted }]}>{hint}</Text> : null}
+      </View>
+      {trailing ?? <Text style={{ color: colors.textMuted, fontSize: 18 }}>›</Text>}
+    </Pressable>
   );
 }
 

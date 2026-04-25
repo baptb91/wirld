@@ -27,6 +27,7 @@ import {
   HYBRID_RECIPES,
 } from '../../engine/HybridBreedingEngine';
 import { useAdStore, GESTATION_SPEEDUP_MS } from '../../store/adStore';
+import { usePurchaseStore } from '../../store/purchaseStore';
 import { AdService } from '../../services/AdService';
 
 interface Props {
@@ -49,7 +50,7 @@ export default function HybridBreedingPanel({ buildingId, firstCreatureId, onClo
   const [selectedSecondId, setSelectedSecondId] = useState<string | null>(null);
   const [adLoading, setAdLoading] = useState(false);
 
-  const isPremium       = useAdStore((s) => s.isPremium);
+  const isAdFree        = usePurchaseStore((s) => s.isAdFree);
   const isSpeedUpUsed   = useAdStore((s) => s.isGestationSpeedUpUsed);
   const markSpeedUpUsed = useAdStore((s) => s.markGestationSpeedUpUsed);
 
@@ -115,7 +116,7 @@ export default function HybridBreedingPanel({ buildingId, firstCreatureId, onClo
 
     const speedUpKey  = `${buildingId}:${building.hybridGestationEndsAt}`;
     const speedUpUsed = isSpeedUpUsed(speedUpKey);
-    const canSpeedUp  = !isPremium && !speedUpUsed && remaining > GESTATION_SPEEDUP_MS;
+    const canSpeedUp  = !isAdFree && !speedUpUsed && remaining > GESTATION_SPEEDUP_MS;
 
     async function handleSpeedUp() {
       if (!canSpeedUp || adLoading || !building) return;

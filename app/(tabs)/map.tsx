@@ -9,12 +9,12 @@ import ResourceBar from '../../src/components/ui/ResourceBar';
 import ActionMenu from '../../src/components/ui/ActionMenu';
 import AdBonusPanel from '../../src/components/ui/AdBonusPanel';
 import { useTheme } from '../../src/constants/theme';
-import { useAdStore } from '../../src/store/adStore';
+import { usePurchaseStore } from '../../src/store/purchaseStore';
 
 export default function MapScreen() {
   const { colors, isDark } = useTheme();
   const [bonusPanelOpen, setBonusPanelOpen] = useState(false);
-  const isPremium = useAdStore((s) => s.isPremium);
+  const isAdFree = usePurchaseStore((s) => s.isAdFree);
 
   const btnBg = isDark ? 'rgba(44,44,46,0.92)' : 'rgba(245,240,232,0.92)';
 
@@ -26,8 +26,8 @@ export default function MapScreen() {
       {/* Top HUD — resource bar */}
       <ResourceBar />
 
-      {/* Bonuses floating button — hidden for premium users */}
-      {!isPremium && (
+      {/* Bonuses floating button — hidden when ads are removed */}
+      {!isAdFree && (
         <Pressable
           style={[styles.bonusBtn, { backgroundColor: btnBg }]}
           onPress={() => setBonusPanelOpen(true)}

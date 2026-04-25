@@ -22,6 +22,7 @@ import { useMapStore } from '../store/mapStore';
 import { useResourceStore } from '../store/resourceStore';
 import { usePlantStore } from '../store/plantStore';
 import { useAdStore, PRODUCTION_BOOST_MULTIPLIER } from '../store/adStore';
+import { usePurchaseStore } from '../store/purchaseStore';
 import { SPECIES_MAP } from '../constants/creatures';
 import { HABITAT_MAP } from '../constants/habitats';
 import { AUTO_WATER_AMOUNT, AUTO_WATER_RANGE_TILES } from '../constants/plants';
@@ -170,6 +171,9 @@ function runProductionTick(now: number): void {
 
     const { productionBoostExpiresAt } = useAdStore.getState();
     if (productionBoostExpiresAt > now) mult *= PRODUCTION_BOOST_MULTIPLIER;
+
+    const { passProductionMultiplier } = usePurchaseStore.getState();
+    mult *= passProductionMultiplier;
 
     if (creature.habitatId) {
       const habitat    = habitats.find((h) => h.id === creature.habitatId);
