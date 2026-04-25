@@ -19,6 +19,10 @@ import { SoundService } from '../../src/services/SoundService';
 import { PurchaseService } from '../../src/services/PurchaseService';
 import { usePurchaseStore } from '../../src/store/purchaseStore';
 import ShopPanel from '../../src/components/ui/ShopPanel';
+import ProfilePanel from '../../src/components/ui/ProfilePanel';
+import LeaderboardPanel from '../../src/components/ui/LeaderboardPanel';
+import MarketPanel from '../../src/components/ui/MarketPanel';
+import { useOnlineStore } from '../../src/store/onlineStore';
 
 export default function SettingsScreen() {
   const sfxEnabled      = useSettingsStore((s) => s.sfxEnabled);
@@ -33,8 +37,14 @@ export default function SettingsScreen() {
 
   const isAdFree      = usePurchaseStore((s) => s.isAdFree);
   const isPremiumPass = usePurchaseStore((s) => s.isPremiumPass);
-  const [shopOpen, setShopOpen]     = useState(false);
-  const [restoring, setRestoring]   = useState(false);
+  const userId        = useOnlineStore((s) => s.userId);
+  const profile       = useOnlineStore((s) => s.profile);
+
+  const [shopOpen,        setShopOpen]        = useState(false);
+  const [profileOpen,     setProfileOpen]     = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [marketOpen,      setMarketOpen]      = useState(false);
+  const [restoring, setRestoring]             = useState(false);
 
   function handleAmbientToggle(v: boolean) {
     setAmbientEnabled(v);
@@ -95,6 +105,24 @@ export default function SettingsScreen() {
           />
         </Section>
 
+        <Section label="Online">
+          <ActionRow
+            label="👤  Profile"
+            hint={userId ? (profile?.username ?? 'Anonymous') : 'Connecting…'}
+            onPress={() => setProfileOpen(true)}
+          />
+          <ActionRow
+            label="🏆  Leaderboard"
+            hint="Top players by rarity score"
+            onPress={() => setLeaderboardOpen(true)}
+          />
+          <ActionRow
+            label="🏪  Market"
+            hint="Buy & sell creatures"
+            onPress={() => setMarketOpen(true)}
+          />
+        </Section>
+
         <Section label="Purchases">
           <ActionRow
             label={isPremiumPass ? '⚡ Wilds Pass — Active' : '🛒 Shop'}
@@ -130,7 +158,10 @@ export default function SettingsScreen() {
         </View>
       </ScrollView>
 
-      {shopOpen && <ShopPanel onClose={() => setShopOpen(false)} />}
+      {shopOpen        && <ShopPanel        onClose={() => setShopOpen(false)}        />}
+      {profileOpen     && <ProfilePanel     onClose={() => setProfileOpen(false)}     />}
+      {leaderboardOpen && <LeaderboardPanel onClose={() => setLeaderboardOpen(false)} />}
+      {marketOpen      && <MarketPanel      onClose={() => setMarketOpen(false)}      />}
     </SafeAreaView>
   );
 }

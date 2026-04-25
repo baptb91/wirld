@@ -8,6 +8,7 @@ import { useBreedingEngine } from '../../src/hooks/useBreedingEngine';
 import OfflineSummaryModal from '../../src/components/ui/OfflineSummaryModal';
 import { SoundService } from '../../src/services/SoundService';
 import { PurchaseService } from '../../src/services/PurchaseService';
+import { SupabaseService } from '../../src/services/SupabaseService';
 import { useSettingsStore } from '../../src/store/settingsStore';
 import { useAdStore } from '../../src/store/adStore';
 import { usePurchaseStore } from '../../src/store/purchaseStore';
@@ -35,6 +36,7 @@ export default function TabLayout() {
     usePurchaseStore.getState().initFirstInstall();
     SoundService.init();
     PurchaseService.init();
+    SupabaseService.init();
   }, []);
 
   useEffect(() => {
