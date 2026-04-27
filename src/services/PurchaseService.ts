@@ -41,7 +41,7 @@ export const PurchaseService = {
   init(): void {
     const apiKey = Platform.OS === 'ios' ? API_KEY_IOS : API_KEY_ANDROID;
     try {
-      Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+      Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.ERROR);
       Purchases.configure({ apiKey });
       PurchaseService.syncEntitlements().catch(() => {});
     } catch {
