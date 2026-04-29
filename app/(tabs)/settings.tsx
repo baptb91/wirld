@@ -35,8 +35,7 @@ export default function SettingsScreen() {
   const setHapticsEnabled = useSettingsStore((s) => s.setHapticsEnabled);
   const setNotifEnabled   = useSettingsStore((s) => s.setNotifEnabled);
 
-  const isAdFree      = usePurchaseStore((s) => s.isAdFree);
-  const isPremiumPass = usePurchaseStore((s) => s.isPremiumPass);
+  const isPro = usePurchaseStore((s) => s.isPro);
   const userId        = useOnlineStore((s) => s.userId);
   const profile       = useOnlineStore((s) => s.profile);
 
@@ -125,19 +124,17 @@ export default function SettingsScreen() {
 
         <Section label="Purchases">
           <ActionRow
-            label={isPremiumPass ? '⚡ Wilds Pass — Active' : '🛒 Shop'}
+            label={isPro ? '⚡ Wilds Pro — Active' : '🛒 Shop'}
             hint={
-              isPremiumPass
+              isPro
                 ? 'No ads · ×1.2 production · +1 creature slot'
-                : isAdFree
-                ? 'Ads removed'
-                : '5 products available'
+                : 'Monthly · Yearly · Lifetime'
             }
             onPress={() => setShopOpen(true)}
           />
           <ActionRow
             label={restoring ? 'Restoring…' : 'Restore Purchases'}
-            hint="Recover previous non-consumable purchases"
+            hint="Recover previous purchases"
             onPress={handleRestore}
             disabled={restoring}
             trailing={restoring ? <ActivityIndicator size="small" color={colors.textMuted} /> : undefined}

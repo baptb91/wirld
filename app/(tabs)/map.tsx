@@ -14,7 +14,7 @@ import { usePurchaseStore } from '../../src/store/purchaseStore';
 export default function MapScreen() {
   const { colors, isDark } = useTheme();
   const [bonusPanelOpen, setBonusPanelOpen] = useState(false);
-  const isAdFree = usePurchaseStore((s) => s.isAdFree);
+  const isAdFree = usePurchaseStore((s) => s.isPro);
 
   const btnBg = isDark ? 'rgba(44,44,46,0.92)' : 'rgba(245,240,232,0.92)';
 

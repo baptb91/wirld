@@ -1,101 +1,96 @@
 /**
- * PurchaseService — RevenueCat wrapper.
+ * PurchaseService — RevenueCat wrapper for WILDS.
  *
- * Products:
- *   wilds_pass_monthly   subscription  — ad_free + premium_pass entitlements
- *   wilds_remove_ads     non-consumable — ad_free entitlement
- *   wilds_starter_pack   consumable    — 50 Gold + 5 Crystals
- *   wilds_crystal_pack   consumable    — 20 Crystals
- *   wilds_crystal_pack_xl consumable   — 60 Crystals
+ * Single entitlement: "wilds Pro"
+ * Products: lifetime · yearly · monthly
  *
- * Sandbox API keys are placeholders; replace before production.
+ * Public SDK key (safe to ship): test_UlOliGRzivRfYjAFFdOhGitLfCp
+ * Secret key: NEVER embed in app — server-side only.
  */
-import { Platform } from 'react-native';
 import Purchases, {
   CustomerInfo,
   LOG_LEVEL,
-  PurchasesOfferings,
 } from 'react-native-purchases';
+import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { usePurchaseStore } from '../store/purchaseStore';
-import { useResourceStore } from '../store/resourceStore';
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
-const API_KEY_IOS     = 'appl_SANDBOX_REPLACE_WITH_REAL_KEY';
-const API_KEY_ANDROID = 'goog_SANDBOX_REPLACE_WITH_REAL_KEY';
-
-const ENTITLEMENT_AD_FREE = 'ad_free';
-const ENTITLEMENT_PREMIUM = 'premium_pass';
-
-/** Consumable product IDs and the resources they grant on purchase */
-const CONSUMABLE_REWARDS: Record<string, { gold?: number; crystals?: number }> = {
-  wilds_starter_pack:    { gold: 50, crystals: 5 },
-  wilds_crystal_pack:    { crystals: 20 },
-  wilds_crystal_pack_xl: { crystals: 60 },
-};
+const SDK_KEY            = 'test_UlOliGRzivRfYjAFFdOhGitLfCp';
+const ENTITLEMENT_PRO    = 'wilds Pro';
 
 // ── Service ──────────────────────────────────────────────────────────────────
 
 export const PurchaseService = {
   /** Call once on app mount, before any other method. */
   init(): void {
-    const apiKey = Platform.OS === 'ios' ? API_KEY_IOS : API_KEY_ANDROID;
     try {
       Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.ERROR);
-      Purchases.configure({ apiKey });
+      Purchases.configure({ apiKey: SDK_KEY });
       PurchaseService.syncEntitlements().catch(() => {});
     } catch {
       // Gracefully skip if native module not linked (e.g. Expo Go)
     }
   },
 
-  /** Re-fetch CustomerInfo and update purchaseStore. */
+  /** Re-fetch CustomerInfo and sync purchaseStore. */
   async syncEntitlements(): Promise<void> {
     try {
       const info = await Purchases.getCustomerInfo();
       applyCustomerInfo(info);
     } catch {
-      // Offline / sandbox with no connection — keep current state
-    }
-  },
-
-  /** Fetch RevenueCat offerings (used by ShopPanel). */
-  async getOfferings(): Promise<PurchasesOfferings | null> {
-    try {
-      return await Purchases.getOfferings();
-    } catch {
-      return null;
+      // Offline — keep current state
     }
   },
 
   /**
-   * Purchase a product by ID.
-   * Returns true if the purchase succeeded (or reward was earned for consumables).
+   * Present the RevenueCat paywall (configured in RC dashboard).
+   * Returns true if the user purchased or restored.
    */
-  async purchase(productId: string): Promise<boolean> {
+  async presentPaywall(): Promise<boolean> {
     try {
-      const offerings = await Purchases.getOfferings();
-      const pkg = offerings?.current?.availablePackages.find(
-        (p: { product: { identifier: string } }) => p.product.identifier === productId,
+      const result = await RevenueCatUI.presentPaywall();
+      await PurchaseService.syncEntitlements();
+      return (
+        result === PAYWALL_RESULT.PURCHASED ||
+        result === PAYWALL_RESULT.RESTORED
       );
-      if (!pkg) return false;
-
-      const { customerInfo } = await Purchases.purchasePackage(pkg);
-      applyCustomerInfo(customerInfo);
-
-      // Grant consumable rewards immediately
-      const reward = CONSUMABLE_REWARDS[productId];
-      if (reward) {
-        const store = useResourceStore.getState();
-        if (reward.gold)     store.addGold(reward.gold);
-        if (reward.crystals) store.addResource('crystals', reward.crystals);
-      }
-      return true;
-    } catch (e: unknown) {
-      const err = e as Record<string, unknown>;
-      // User-cancelled is not a real error
-      if (err['userCancelled'] === true) return false;
+    } catch {
       return false;
+    }
+  },
+
+  /**
+   * Present paywall only if the user does not have "wilds Pro".
+   * Returns true if they ended up with an active entitlement.
+   */
+  async presentPaywallIfNeeded(): Promise<boolean> {
+    try {
+      const result = await RevenueCatUI.presentPaywallIfNeeded({
+        requiredEntitlementIdentifier: ENTITLEMENT_PRO,
+      });
+      await PurchaseService.syncEntitlements();
+      return (
+        result === PAYWALL_RESULT.PURCHASED ||
+        result === PAYWALL_RESULT.RESTORED  ||
+        result === PAYWALL_RESULT.NOT_PRESENTED // already subscribed
+      );
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Open the RevenueCat Customer Center (manage subscription, request refund,
+   * contact support). Should be offered to existing subscribers.
+   */
+  async presentCustomerCenter(): Promise<void> {
+    try {
+      await RevenueCatUI.presentCustomerCenter();
+      // Re-sync in case the user cancelled / changed their plan
+      await PurchaseService.syncEntitlements();
+    } catch {
+      // Customer Center unavailable (Expo Go, simulator, no connection)
     }
   },
 
@@ -113,9 +108,6 @@ export const PurchaseService = {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function applyCustomerInfo(info: CustomerInfo): void {
-  const { setAdFree, setPremiumPass } = usePurchaseStore.getState();
-  const hasPremium = !!info.entitlements.active[ENTITLEMENT_PREMIUM];
-  const hasAdFree  = !!info.entitlements.active[ENTITLEMENT_AD_FREE];
-  setPremiumPass(hasPremium);
-  setAdFree(hasAdFree || hasPremium);
+  const isPro = !!info.entitlements.active[ENTITLEMENT_PRO];
+  usePurchaseStore.getState().setIsPro(isPro);
 }

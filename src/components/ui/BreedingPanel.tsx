@@ -46,7 +46,7 @@ export default function BreedingPanel({ habitatId, onClose }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  const isAdFree              = usePurchaseStore((s) => s.isAdFree);
+  const isAdFree              = usePurchaseStore((s) => s.isPro);
   const isSpeedUpUsed         = useAdStore((s) => s.isGestationSpeedUpUsed);
   const markSpeedUpUsed       = useAdStore((s) => s.markGestationSpeedUpUsed);
 
