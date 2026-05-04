@@ -20,7 +20,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
-import { Canvas } from '@shopify/react-native-skia';
+import { Canvas, Rect } from '@shopify/react-native-skia';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
   interpolateColor,
@@ -33,11 +33,14 @@ import { useMapStore } from '../../store/mapStore';
 import { useCreatureStore, Creature } from '../../store/creatureStore';
 import { usePlantStore } from '../../store/plantStore';
 import { useResourceStore } from '../../store/resourceStore';
+import { useRavagerStore } from '../../store/ravagerStore';
 import { HABITAT_MAP } from '../../constants/habitats';
 import { BUILDING_MAP } from '../../constants/buildings';
 import { SPECIES_MAP } from '../../constants/creatures';
 import { PLANT_MAP, MANUAL_WATER_AMOUNT } from '../../constants/plants';
 import { isCreatureCompatibleWithHabitat } from '../../engine/CreatureAI';
+import { findBreedPair } from '../../engine/BreedingEngine';
+import { findHybridResult } from '../../engine/HybridBreedingEngine';
 import {
   TILE_SIZE,
   GRID_COLS,
@@ -47,19 +50,34 @@ import {
 } from '../../constants/terrain';
 import { getSkyProgress } from '../../engine/TimeEngine';
 import { useDayNight } from '../../hooks/useDayNight';
+import { useEcosystemEngine } from '../../hooks/useEcosystemEngine';
+import { useRavagerEngine } from '../../hooks/useRavagerEngine';
 import TerrainTile from './TerrainTile';
 import HabitatBuilding from './HabitatBuilding';
 import PlantSprite from './PlantSprite';
 import CreatureSprite from './CreatureSprite';
+import RavagerSprite from './RavagerSprite';
 import WarehouseBuilding from './WarehouseBuilding';
+import LaboratoryBuilding from './LaboratoryBuilding';
 import WarehousePanel from '../ui/WarehousePanel';
+import CaptureOverlay from '../ui/CaptureOverlay';
+import RavagerAlert from '../ui/RavagerAlert';
+import BattleResultModal from '../ui/BattleResultModal';
+import DefensePanel from '../ui/DefensePanel';
+import CarnivoreHungerPanel from '../ui/CarnivoreHungerPanel';
+import TransformerPanel from '../ui/TransformerPanel';
+import BreedingPanel from '../ui/BreedingPanel';
+import HybridBreedingPanel from '../ui/HybridBreedingPanel';
 import MiniMap from './MiniMap';
+import { interpolateRavagerPos } from '../../engine/RavagerEngine';
+import { SoundService } from '../../services/SoundService';
+import { HapticsService } from '../../services/HapticsService';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const MIN_SCALE = 0.4;
+const MIN_SCALE = 0.5;
 const MAX_SCALE = 3.0;
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -92,6 +110,8 @@ export default function MapCanvas() {
   const selectedTool      = useMapStore((s) => s.selectedTool);
   const selectedHabitat   = useMapStore((s) => s.selectedHabitat);
   const selectedBuilding  = useMapStore((s) => s.selectedBuilding);
+  const unlockedCols      = useMapStore((s) => s.unlockedCols);
+  const unlockedRows      = useMapStore((s) => s.unlockedRows);
   const paintTile         = useMapStore((s) => s.paintTile);
   const habitats          = useMapStore((s) => s.habitats);
   const buildings         = useMapStore((s) => s.buildings);
@@ -100,12 +120,24 @@ export default function MapCanvas() {
   const selectHabitat     = useMapStore((s) => s.selectHabitat);
   const selectBuilding    = useMapStore((s) => s.selectBuilding);
   const creatures         = useCreatureStore((s) => s.creatures);
+  const ravagers          = useRavagerStore((s) => s.ravagers);
+  const setFocusedRavager = useRavagerStore((s) => s.setFocusedRavager);
   const plants            = usePlantStore((s) => s.plants);
   const selectedPlantType = usePlantStore((s) => s.selectedPlantType);
 
-  const [warehousePanelOpen, setWarehousePanelOpen] = useState(false);
+  const [warehousePanelOpen, setWarehousePanelOpen]     = useState(false);
+  const [transformerPanelOpen, setTransformerPanelOpen] = useState(false);
+  const [captureTarget, setCaptureTarget]               = useState<Creature | null>(null);
+  const [hungerTarget, setHungerTarget]                 = useState<Creature | null>(null);
+  const [breedingHabitatId, setBreedingHabitatId]       = useState<string | null>(null);
+  const [hybridPanelState, setHybridPanelState]         = useState<{ buildingId: string; firstCreatureId?: string } | null>(null);
 
   const period = useDayNight();
+
+  // Wild creature spawn + departure engine
+  useEcosystemEngine();
+  // Ravager attack-wave engine
+  useRavagerEngine();
 
   // ── Sky gradient ─────────────────────────────────────────────────────────
   const skyProgress = useSharedValue(getSkyProgress());
@@ -129,10 +161,17 @@ export default function MapCanvas() {
   const habitatOpenProgress = useSharedValue(
     (period === 'dawn' || period === 'day') ? 1 : 0,
   );
+  const prevPeriodRef = useRef<typeof period | null>(null);
 
   useEffect(() => {
-    const target = (period === 'dawn' || period === 'day') ? 1 : 0;
+    const isDaytime = period === 'dawn' || period === 'day';
+    const target = isDaytime ? 1 : 0;
     habitatOpenProgress.value = withTiming(target, { duration: 25_000 });
+    // Play door sound on transition (skip the initial mount render)
+    if (prevPeriodRef.current !== null && prevPeriodRef.current !== period) {
+      SoundService.play(isDaytime ? 'doorOpen' : 'doorClose');
+    }
+    prevPeriodRef.current = period;
   }, [period]);
 
   // ── Camera shared values ─────────────────────────────────────────────────
@@ -210,6 +249,16 @@ export default function MapCanvas() {
     );
   }, [draggingChip, habitats]);
 
+  // ── Breed-ready habitat IDs ───────────────────────────────────────────────
+  const breedReadyHabitatIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const h of habitats) {
+      if (h.gestationEndsAt) continue; // already gestating
+      if (findBreedPair(h, creatures)) set.add(h.id);
+    }
+    return set;
+  }, [habitats, creatures]);
+
   // ── Drag chip animated style ──────────────────────────────────────────────
   const dragChipStyle = useAnimatedStyle(() => ({
     transform: [
@@ -230,6 +279,7 @@ export default function MapCanvas() {
       const last = lastPaintedTile.current;
       if (last && last.x === tileX && last.y === tileY) return;
       lastPaintedTile.current = { x: tileX, y: tileY };
+      HapticsService.light();
       paintTile(tileX, tileY, selectedTool);
     },
     [selectedTool, paintTile, translateX, scale],
@@ -255,6 +305,7 @@ export default function MapCanvas() {
       const tileX    = Math.max(0, tapTileX - half);
       const tileY    = Math.max(0, tapTileY - half);
 
+      HapticsService.medium();
       placeHabitat({
         id: `habitat-${Date.now()}`,
         habitatTypeId: selectedHabitat,
@@ -329,6 +380,21 @@ export default function MapCanvas() {
       const worldX = (sx - translateX.value) / scale.value;
       const worldY = (sy - translateY.value) / scale.value;
 
+      // Ravager tap — focus carnivore attacks on this ravager
+      const { ravagers: rs } = useRavagerStore.getState();
+      const RAVAGER_HIT_SQ = (TILE_SIZE * 0.7) ** 2;
+      const now = Date.now();
+      for (const r of rs) {
+        if (r.state === 'done') continue;
+        const rp = interpolateRavagerPos(r, now);
+        const dx = rp.x - worldX;
+        const dy = rp.y - worldY;
+        if (dx * dx + dy * dy < RAVAGER_HIT_SQ) {
+          setFocusedRavager(r.id);
+          return;
+        }
+      }
+
       const { creatures: cs, wakeCreature, affectCreature } = useCreatureStore.getState();
       const HIT_SQ = (TILE_SIZE * 0.9) ** 2;
 
@@ -336,6 +402,22 @@ export default function MapCanvas() {
         const dx = c.targetPosition.x - worldX;
         const dy = c.targetPosition.y - worldY;
         if (dx * dx + dy * dy < HIT_SQ) {
+          // Wild (uncaptured) creature — open capture mini-game
+          if (c.wildExpiresAt !== null && c.habitatId === null) {
+            setCaptureTarget(c);
+            return;
+          }
+          // Hungry carnivore — open feed panel
+          if (SPECIES_MAP.get(c.speciesId)?.type === 'carnivore' && c.hunger > 0) {
+            setHungerTarget(c);
+            return;
+          }
+          const creatureType = SPECIES_MAP.get(c.speciesId)?.type;
+          const tapKey =
+            creatureType === 'carnivore' ? 'tapCarnivore' :
+            creatureType === 'aquatic'   ? 'tapAquatic'   : 'tapHerbivore';
+          SoundService.play(tapKey);
+          HapticsService.light();
           if (c.state === 'sleeping' || c.state === 'stumbling') {
             wakeCreature(c.id);
           } else if (c.state === 'active') {
@@ -377,12 +459,30 @@ export default function MapCanvas() {
         if (worldX >= bX && worldX <= bX + bW && worldY >= bY && worldY <= bY + bW) {
           if (b.buildingTypeId === 'warehouse') {
             setWarehousePanelOpen(true);
+          } else if (b.buildingTypeId === 'transformer') {
+            setTransformerPanelOpen(true);
+          } else if (b.buildingTypeId === 'laboratory') {
+            setHybridPanelState({ buildingId: b.id });
           }
           return;
         }
       }
+
+      // Check habitats — open breeding panel
+      const { habitats: hs2 } = useMapStore.getState();
+      for (const h of hs2) {
+        const def = HABITAT_MAP.get(h.habitatTypeId);
+        if (!def) continue;
+        const hX = h.tileX * TILE_SIZE;
+        const hY = h.tileY * TILE_SIZE;
+        const hW = def.tileSize * TILE_SIZE;
+        if (worldX >= hX && worldX <= hX + hW && worldY >= hY && worldY <= hY + hW) {
+          setBreedingHabitatId(h.id);
+          return;
+        }
+      }
     },
-    [translateX, scale],
+    [translateX, scale, setFocusedRavager],
   );
 
   // ── Long-press: start creature drag ──────────────────────────────────────
@@ -454,11 +554,39 @@ export default function MapCanvas() {
           if (!alreadyIn) {
             assignCreatureToHabitat(h.id, creature.id);
           }
-          useCreatureStore.getState().updateCreature(creature.id, { habitatId: h.id });
+          useCreatureStore.getState().updateCreature(creature.id, {
+            habitatId:            h.id,
+            wildExpiresAt:        null, // creature is now captured — won't depart
+            sleepCyclesInHabitat: 0,
+          });
           return;
         }
       }
-      // Dropped outside any valid target — no change
+      // No habitat matched — check Laboratory for hybrid breeding
+      const { buildings: labs } = useMapStore.getState();
+      for (const b of labs) {
+        if (b.buildingTypeId !== 'laboratory') continue;
+        if (b.hybridGestationEndsAt) continue; // already gestating
+        const def = BUILDING_MAP.get(b.buildingTypeId);
+        if (!def) continue;
+        const bX = b.tileX * TILE_SIZE;
+        const bY = b.tileY * TILE_SIZE;
+        const bW = def.tileSize * TILE_SIZE;
+        if (worldX >= bX && worldX <= bX + bW && worldY >= bY && worldY <= bY + bW) {
+          // Check if this creature has any valid hybrid partner owned by player
+          const { creatures: cs } = useCreatureStore.getState();
+          const hasPartner = cs.some(
+            (c) =>
+              c.id !== creature.id &&
+              c.wildExpiresAt === null &&
+              findHybridResult(creature.speciesId, c.speciesId) !== null,
+          );
+          if (hasPartner) {
+            setHybridPanelState({ buildingId: b.id, firstCreatureId: creature.id });
+          }
+          return;
+        }
+      }
     },
     [translateX, scale],
   );
@@ -627,24 +755,60 @@ export default function MapCanvas() {
                     occupancy={h.assignedCreatureIds.length}
                     capacity={def?.capacity ?? 0}
                     highlighted={compatibleHabitatIds.has(h.id)}
+                    breedReady={breedReadyHabitatIds.has(h.id)}
                   />
                 );
               })}
 
               {/* ── Building layer (above habitats, below creatures) ── */}
-              {buildings.map((b) => (
-                <WarehouseBuilding
-                  key={b.id}
-                  x={b.tileX * TILE_SIZE}
-                  y={b.tileY * TILE_SIZE}
-                  isSelected={selectedBuilding === b.buildingTypeId}
-                />
-              ))}
+              {buildings.map((b) =>
+                b.buildingTypeId === 'laboratory' ? (
+                  <LaboratoryBuilding
+                    key={b.id}
+                    x={b.tileX * TILE_SIZE}
+                    y={b.tileY * TILE_SIZE}
+                    isSelected={selectedBuilding === b.buildingTypeId}
+                    gestating={!!(b.hybridGestationEndsAt && b.hybridGestationEndsAt > Date.now())}
+                  />
+                ) : (
+                  <WarehouseBuilding
+                    key={b.id}
+                    x={b.tileX * TILE_SIZE}
+                    y={b.tileY * TILE_SIZE}
+                    isSelected={selectedBuilding === b.buildingTypeId}
+                  />
+                ),
+              )}
 
               {/* ── Creature layer ── */}
               {creatures.map((creature) => (
                 <CreatureSprite key={creature.id} creature={creature} />
               ))}
+
+              {/* ── Ravager layer (above creatures) ── */}
+              {ravagers.map((r) => (
+                <RavagerSprite key={r.id} ravager={r} />
+              ))}
+
+              {/* ── Fog of war — locked (unpurchased) map area ── */}
+              {unlockedCols < GRID_COLS && (
+                <Rect
+                  x={unlockedCols * TILE_SIZE}
+                  y={0}
+                  width={(GRID_COLS - unlockedCols) * TILE_SIZE}
+                  height={MAP_HEIGHT}
+                  color="rgba(0,0,0,0.55)"
+                />
+              )}
+              {unlockedRows < GRID_ROWS && (
+                <Rect
+                  x={0}
+                  y={unlockedRows * TILE_SIZE}
+                  width={unlockedCols * TILE_SIZE}
+                  height={(GRID_ROWS - unlockedRows) * TILE_SIZE}
+                  color="rgba(0,0,0,0.55)"
+                />
+              )}
             </Canvas>
           </Animated.View>
         </View>
@@ -675,6 +839,55 @@ export default function MapCanvas() {
         visible={warehousePanelOpen}
         onClose={() => setWarehousePanelOpen(false)}
       />
+
+      {/* Capture mini-game overlay */}
+      {captureTarget && (
+        <CaptureOverlay
+          creature={captureTarget}
+          onClose={() => setCaptureTarget(null)}
+        />
+      )}
+
+      {/* Carnivore hunger feed panel */}
+      {hungerTarget && (
+        <CarnivoreHungerPanel
+          creature={hungerTarget}
+          onClose={() => setHungerTarget(null)}
+        />
+      )}
+
+      {/* Transformer building panel */}
+      {transformerPanelOpen && (
+        <TransformerPanel
+          onClose={() => setTransformerPanelOpen(false)}
+        />
+      )}
+
+      {/* Breeding panel — shown when tapping any habitat */}
+      {breedingHabitatId && (
+        <BreedingPanel
+          habitatId={breedingHabitatId}
+          onClose={() => setBreedingHabitatId(null)}
+        />
+      )}
+
+      {/* Hybrid breeding panel — shown when dragging creature onto Laboratory or tapping lab */}
+      {hybridPanelState && (
+        <HybridBreedingPanel
+          buildingId={hybridPanelState.buildingId}
+          firstCreatureId={hybridPanelState.firstCreatureId}
+          onClose={() => setHybridPanelState(null)}
+        />
+      )}
+
+      {/* Defense activation panel — shown during active waves */}
+      <DefensePanel />
+
+      {/* Ravager incoming warning banner */}
+      <RavagerAlert />
+
+      {/* Post-wave battle result modal */}
+      <BattleResultModal />
     </View>
   );
 }

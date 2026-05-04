@@ -1,9 +1,17 @@
 import { Tabs } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
-import { theme } from '../../src/constants/theme';
+import { useEffect } from 'react';
+import { theme, useTheme } from '../../src/constants/theme';
 import { useGameLoop } from '../../src/hooks/useGameLoop';
 import { useCreatureAI } from '../../src/hooks/useCreatureAI';
+import { useBreedingEngine } from '../../src/hooks/useBreedingEngine';
 import OfflineSummaryModal from '../../src/components/ui/OfflineSummaryModal';
+import { SoundService } from '../../src/services/SoundService';
+import { PurchaseService } from '../../src/services/PurchaseService';
+import { SupabaseService } from '../../src/services/SupabaseService';
+import { useSettingsStore } from '../../src/store/settingsStore';
+import { useAdStore } from '../../src/store/adStore';
+import { usePurchaseStore } from '../../src/store/purchaseStore';
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return (
@@ -17,15 +25,42 @@ export default function TabLayout() {
   // Game-loop hooks live here so they run regardless of which tab is active
   useGameLoop();
   useCreatureAI();
+  useBreedingEngine();
+
+  const ambientEnabled = useSettingsStore((s) => s.ambientEnabled);
+  const { colors } = useTheme();
+
+  useEffect(() => {
+    // loadSettings() is called in the root layout before this mounts
+    useAdStore.getState().loadAdState();
+    usePurchaseStore.getState().initFirstInstall();
+    SoundService.init();
+    PurchaseService.init();
+    SupabaseService.init();
+  }, []);
+
+  useEffect(() => {
+    if (ambientEnabled) {
+      SoundService.startAmbient();
+    } else {
+      SoundService.stopAmbient();
+    }
+  }, [ambientEnabled]);
 
   return (
     <View style={styles.root}>
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarStyle: styles.tabBar,
-          tabBarActiveTintColor: theme.colors.tabActive,
-          tabBarInactiveTintColor: theme.colors.tabInactive,
+          tabBarStyle: {
+            backgroundColor: colors.tabBar,
+            borderTopColor: colors.border,
+            borderTopWidth: 1,
+            height: 58,
+            paddingBottom: 6,
+          },
+          tabBarActiveTintColor: colors.tabActive,
+          tabBarInactiveTintColor: colors.tabInactive,
           tabBarLabelStyle: styles.tabLabel,
         }}
       >
@@ -61,13 +96,6 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-  },
-  tabBar: {
-    backgroundColor: theme.colors.tabBar,
-    borderTopColor: theme.colors.border,
-    borderTopWidth: 1,
-    height: 58,
-    paddingBottom: 6,
   },
   tabLabel: {
     fontFamily: theme.fonts.body,

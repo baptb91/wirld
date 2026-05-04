@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { GrowthState, PLANT_MAP } from '../constants/plants';
-import { GRID_COLS, GRID_ROWS } from '../constants/terrain';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,6 +45,8 @@ export interface PlantStoreActions {
   harvestPlant: (id: string) => { resourceId: string; resourceAmount: number } | null;
   /** Select a plant type for placement (null clears the selection) */
   selectPlantType: (id: string | null) => void;
+  /** Shift all plant tile coordinates by (dx, dy) — used after left/top map expansion */
+  shiftTiles: (dx: number, dy: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +65,6 @@ export const usePlantStore = create<PlantStoreState & PlantStoreActions>((set, g
 
   placePlant: (tileX, tileY, typeId) => {
     set((s) => {
-      if (tileX < 0 || tileX >= GRID_COLS || tileY < 0 || tileY >= GRID_ROWS) return s;
       if (!PLANT_MAP.has(typeId)) return s;
       // Only one plant per tile
       if (s.plants.some((p) => p.tileX === tileX && p.tileY === tileY)) return s;
@@ -172,4 +172,13 @@ export const usePlantStore = create<PlantStoreState & PlantStoreActions>((set, g
   },
 
   selectPlantType: (id) => set({ selectedPlantType: id }),
+
+  shiftTiles: (dx, dy) =>
+    set((s) => ({
+      plants: s.plants.map((p) => ({
+        ...p,
+        tileX: p.tileX + dx,
+        tileY: p.tileY + dy,
+      })),
+    })),
 }));

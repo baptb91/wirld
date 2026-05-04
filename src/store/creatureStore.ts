@@ -16,6 +16,8 @@ export interface Creature {
   happiness: number;
   /** 0–100; carnivores only — others always 0 */
   hunger: number;
+  /** UTC ms of last hunger calculation — used to avoid double-counting per tick */
+  lastHungerAt: number;
   isShiny: boolean;
   habitatId: string | null;
   state: CreatureState;
@@ -33,10 +35,18 @@ export interface Creature {
   sleepInterrupts: number;
   /** Timestamp: when affection was last shown (heart animation trigger). */
   lastAffectedAt: number;
+  /**
+   * null  = permanent (starter / assigned to habitat).
+   * number = UTC ms when a wild creature leaves if still unassigned.
+   */
+  wildExpiresAt: number | null;
+  /** How many full sleep cycles this creature has completed while in its current habitat. */
+  sleepCyclesInHabitat: number;
 }
 
 export interface CreatureState2 {
   creatures: Creature[];
+  maxCreatures: number;
 }
 
 export interface CreatureActions {
@@ -45,7 +55,11 @@ export interface CreatureActions {
   updateCreature: (id: string, updates: Partial<Creature>) => void;
   wakeCreature: (id: string) => void;
   affectCreature: (id: string) => void;
+  /** Feed a carnivore: reset hunger to 0 */
+  feedCreature: (id: string) => void;
   setCreatures: (cs: Creature[]) => void;
+  increaseMaxCreatures: (amount: number) => void;
+  shiftPositions: (dx: number, dy: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,6 +83,7 @@ function makeStarter(): Creature[] {
       level: 1,
       happiness: 70,
       hunger: 0,
+      lastHungerAt: now,
       isShiny: false,
       habitatId: null,
       state: isCreatureActive('diurnal') ? 'active' : 'sleeping',
@@ -80,6 +95,8 @@ function makeStarter(): Creature[] {
       lastWokenAt: 0,
       sleepInterrupts: 0,
       lastAffectedAt: 0,
+      wildExpiresAt: null,
+      sleepCyclesInHabitat: 0,
     },
     {
       id: 'starter-broutard-1',
@@ -88,6 +105,7 @@ function makeStarter(): Creature[] {
       level: 1,
       happiness: 65,
       hunger: 0,
+      lastHungerAt: now,
       isShiny: false,
       habitatId: null,
       state: isCreatureActive('diurnal') ? 'active' : 'sleeping',
@@ -99,6 +117,8 @@ function makeStarter(): Creature[] {
       lastWokenAt: 0,
       sleepInterrupts: 0,
       lastAffectedAt: 0,
+      wildExpiresAt: null,
+      sleepCyclesInHabitat: 0,
     },
     {
       id: 'starter-flottin-1',
@@ -107,6 +127,7 @@ function makeStarter(): Creature[] {
       level: 1,
       happiness: 75,
       hunger: 0,
+      lastHungerAt: now,
       isShiny: false,
       habitatId: null,
       state: isCreatureActive('diurnal') ? 'active' : 'sleeping',
@@ -118,6 +139,8 @@ function makeStarter(): Creature[] {
       lastWokenAt: 0,
       sleepInterrupts: 0,
       lastAffectedAt: 0,
+      wildExpiresAt: null,
+      sleepCyclesInHabitat: 0,
     },
   ];
 }
@@ -129,6 +152,7 @@ function makeStarter(): Creature[] {
 export const useCreatureStore = create<CreatureState2 & CreatureActions>(
   (set, get) => ({
     creatures: makeStarter(),
+    maxCreatures: 10,
 
     addCreature: (c) =>
       set((s) => ({ creatures: [...s.creatures, c] })),
@@ -148,9 +172,10 @@ export const useCreatureStore = create<CreatureState2 & CreatureActions>(
       set((s) => ({
         creatures: s.creatures.map((c) => {
           if (c.id !== id || c.state !== 'sleeping') return c;
+          // -3 happiness when forcefully woken beyond the 2nd time in a sleep cycle
           const happiness =
-            now - c.lastWokenAt < 10_000
-              ? Math.max(0, c.happiness - 3) // penalty for tapping again < 10s
+            c.sleepInterrupts >= 2
+              ? Math.max(0, c.happiness - 3)
               : c.happiness;
           return {
             ...c,
@@ -164,13 +189,22 @@ export const useCreatureStore = create<CreatureState2 & CreatureActions>(
       }));
     },
 
+    feedCreature: (id) => {
+      const now = Date.now();
+      set((s) => ({
+        creatures: s.creatures.map((c) =>
+          c.id === id ? { ...c, hunger: 0, lastHungerAt: now } : c,
+        ),
+      }));
+    },
+
     affectCreature: (id) => {
       const now = Date.now();
       set((s) => ({
         creatures: s.creatures.map((c) => {
           if (c.id !== id || c.state !== 'active') return c;
-          // +5 happiness, max 1 per hour
-          // (simplification: always apply for Phase 2)
+          // +5 happiness, max once per hour
+          if (now - c.lastAffectedAt < 3_600_000) return c;
           return {
             ...c,
             happiness: Math.min(100, c.happiness + 5),
@@ -181,5 +215,17 @@ export const useCreatureStore = create<CreatureState2 & CreatureActions>(
     },
 
     setCreatures: (cs) => set({ creatures: cs }),
+
+    increaseMaxCreatures: (amount) =>
+      set((s) => ({ maxCreatures: s.maxCreatures + amount })),
+
+    shiftPositions: (dx, dy) =>
+      set((s) => ({
+        creatures: s.creatures.map((c) => ({
+          ...c,
+          position:       { x: c.position.x + dx,       y: c.position.y + dy },
+          targetPosition: { x: c.targetPosition.x + dx, y: c.targetPosition.y + dy },
+        })),
+      })),
   }),
 );

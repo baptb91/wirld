@@ -21,10 +21,14 @@ import { useCreatureStore } from '../store/creatureStore';
 import { useMapStore } from '../store/mapStore';
 import { useResourceStore } from '../store/resourceStore';
 import { usePlantStore } from '../store/plantStore';
+import { useAdStore, PRODUCTION_BOOST_MULTIPLIER } from '../store/adStore';
+import { usePurchaseStore } from '../store/purchaseStore';
 import { SPECIES_MAP } from '../constants/creatures';
 import { HABITAT_MAP } from '../constants/habitats';
 import { AUTO_WATER_AMOUNT, AUTO_WATER_RANGE_TILES } from '../constants/plants';
 import { TILE_SIZE } from '../constants/terrain';
+import { notifyCarnivoreHungry } from '../services/NotificationService';
+import { computeHappinessDelta, productionMultiplier } from '../engine/HappinessEngine';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -38,6 +42,17 @@ const MIN_SUMMARY_SECONDS = 5 * 60;
 /** Duration of one move/auto-water tick in ms */
 const MOVE_TICK_MS        = 2_000;
 const LAST_TICK_KEY       = '@wilds/lastTickTime';
+
+/** Carnivore hunger: 5 units per hour */
+const HUNGER_PER_MS       = 5 / (60 * 60 * 1000);
+/** Vivarium: 3 fish per 24 h */
+const VIVARIUM_INTERVAL_MS     = 24 * 60 * 60 * 1000;
+const VIVARIUM_FISH_PER_CYCLE  = 3;
+
+/** Happiness tick: once per hour */
+const HAPPINESS_TICK_MS = 3_600_000;
+/** Module-level timestamp so we don't re-run within the same hour */
+let lastHappinessTickAt = 0;
 
 // ---------------------------------------------------------------------------
 // AsyncStorage helpers
@@ -61,6 +76,31 @@ async function saveLastTick(ts: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Happiness tick — runs at most once per hour
+// ---------------------------------------------------------------------------
+
+function runHappinessTick(now: number): void {
+  if (now - lastHappinessTickAt < HAPPINESS_TICK_MS) return;
+  lastHappinessTickAt = now;
+
+  const { creatures }   = useCreatureStore.getState();
+  const { habitats, terrainGrid } = useMapStore.getState();
+
+  for (const creature of creatures) {
+    const delta = computeHappinessDelta(creature, {
+      habitats,
+      allCreatures: creatures,
+      terrainGrid,
+    });
+    if (delta === 0) continue;
+    const newHappiness = Math.max(0, Math.min(100, creature.happiness + delta));
+    if (newHappiness !== creature.happiness) {
+      useCreatureStore.getState().updateCreature(creature.id, { happiness: newHappiness });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Production tick — handles any number of missed production intervals
 // ---------------------------------------------------------------------------
 
@@ -73,6 +113,49 @@ function runProductionTick(now: number): void {
     const def = SPECIES_MAP.get(creature.speciesId);
     if (!def) continue;
 
+    // ── Carnivore hunger ────────────────────────────────────────────────────
+    if (def.type === 'carnivore' && creature.state !== 'sleeping') {
+      const hungerElapsed = Math.min(
+        now - (creature.lastHungerAt ?? now),
+        MAX_OFFLINE_SECONDS * 1000,
+      );
+      const hungerGain = hungerElapsed * HUNGER_PER_MS;
+      const prevHunger = creature.hunger;
+      const newHunger  = Math.min(100, prevHunger + hungerGain);
+
+      const hungerUpdates: Partial<typeof creature> = {
+        hunger:       newHunger,
+        lastHungerAt: now,
+      };
+
+      if (prevHunger < 80 && newHunger >= 80) {
+        notifyCarnivoreHungry();
+      }
+
+      if (newHunger >= 100 && prevHunger < 100) {
+        // Auto-attack: eat a random owned herbivore
+        const { creatures: cs } = useCreatureStore.getState();
+        const herbivores = cs.filter(
+          (c) =>
+            c.id !== creature.id &&
+            c.wildExpiresAt === null &&
+            SPECIES_MAP.get(c.speciesId)?.type === 'herbivore',
+        );
+        if (herbivores.length > 0) {
+          const victim = herbivores[Math.floor(Math.random() * herbivores.length)];
+          if (victim.habitatId) {
+            useMapStore.getState().unassignCreatureFromHabitat(victim.habitatId, victim.id);
+          }
+          useCreatureStore.getState().removeCreature(victim.id);
+          hungerUpdates.hunger       = 0;
+          hungerUpdates.lastHungerAt = now;
+        }
+      }
+
+      useCreatureStore.getState().updateCreature(creature.id, hungerUpdates);
+    }
+
+    // ── Resource production ─────────────────────────────────────────────────
     const intervalMs = def.productionInterval * 1000;
     const elapsed = Math.min(
       now - creature.lastProducedAt,
@@ -82,9 +165,15 @@ function runProductionTick(now: number): void {
 
     const intervals = Math.floor(elapsed / intervalMs);
 
-    let mult =
-      creature.happiness >= 80 ? 1.5 :
-      creature.happiness >= 50 ? 1.0 : 0.5;
+    let mult = productionMultiplier(creature.happiness);
+
+    if (creature.isShiny) mult *= 2;
+
+    const { productionBoostExpiresAt } = useAdStore.getState();
+    if (productionBoostExpiresAt > now) mult *= PRODUCTION_BOOST_MULTIPLIER;
+
+    const { passProductionMultiplier } = usePurchaseStore.getState();
+    mult *= passProductionMultiplier;
 
     if (creature.habitatId) {
       const habitat    = habitats.find((h) => h.id === creature.habitatId);
@@ -99,6 +188,20 @@ function runProductionTick(now: number): void {
 
     useCreatureStore.getState().updateCreature(creature.id, {
       lastProducedAt: creature.lastProducedAt + intervals * intervalMs,
+    });
+  }
+
+  // ── Vivarium: produce fish every 24 h ──────────────────────────────────
+  const { buildings } = useMapStore.getState();
+  for (const b of buildings) {
+    if (b.buildingTypeId !== 'vivarium') continue;
+    const lastProduced = b.lastProducedAt ?? now;
+    const elapsed = Math.min(now - lastProduced, MAX_OFFLINE_SECONDS * 1000);
+    if (elapsed < VIVARIUM_INTERVAL_MS) continue;
+    const cycles = Math.floor(elapsed / VIVARIUM_INTERVAL_MS);
+    addResource('fish', cycles * VIVARIUM_FISH_PER_CYCLE);
+    useMapStore.getState().updateBuilding(b.id, {
+      lastProducedAt: lastProduced + cycles * VIVARIUM_INTERVAL_MS,
     });
   }
 }
@@ -175,6 +278,7 @@ async function applyOfflineProgress(): Promise<void> {
   const before = snapshotResources();
 
   // ── Apply offline progress ──────────────────────────────────────────────
+  runHappinessTick(now);
   runProductionTick(now);
   if (cappedElapsedMs > 0) {
     runOfflineAutoWater(cappedElapsedMs);
@@ -209,8 +313,10 @@ export function useGameLoop(): void {
   const startInterval = () => {
     if (intervalRef.current) return;
     intervalRef.current = setInterval(async () => {
-      runProductionTick(Date.now());
-      await saveLastTick(Date.now());
+      const now = Date.now();
+      runHappinessTick(now);
+      runProductionTick(now);
+      await saveLastTick(now);
     }, TICK_MS);
   };
 

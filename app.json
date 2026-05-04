@@ -3,7 +3,8 @@
     "name": "WILDS",
     "slug": "wilds",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "description": "Build your ecosystem. Attract wild creatures. Defend your terrain.",
+    "orientation": "landscape",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
@@ -13,14 +14,26 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.baptiste.wilds"
+      "bundleIdentifier": "com.baptiste.wilds",
+      "infoPlist": {
+        "NSUserNotificationsUsageDescription": "WILDS sends alerts when wild creatures appear in your terrain and when habitats need attention.",
+        "UIRequiresPersistentWiFi": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#4A7C59"
       },
-      "package": "com.baptiste.wilds"
+      "package": "com.baptiste.wilds",
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "com.android.vending.BILLING"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -36,6 +49,22 @@
           "image": "./assets/images/splash.png",
           "resizeMode": "contain",
           "backgroundColor": "#4A7C59"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#4A7C59",
+          "sounds": [],
+          "mode": "production"
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-7176796852364415~1274919800",
+          "iosAppId": "ca-app-pub-7176796852364415~8770266443"
         }
       ]
     ],
